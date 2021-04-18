@@ -32,3 +32,8 @@ Extra Details - https://www.youtube.com/watch?v=GLfKier6Eo0
 #### Miscellaneous
 (5) Make a video of yourself playing, showcasing your features  
 (5) Two artistic/well-composedscreenshotsfrom your game  
+
+
+#### Struggles
+Getting Texture2DArray took approximately 24 hours to get working. I consider that a good bit of time, but I am happy that it is working. There's also just a lot of little things that take up hours. 
+OpenGL overall is easier to use than I anticipated, though. I enjoyed it.
