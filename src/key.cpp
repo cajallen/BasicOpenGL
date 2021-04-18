@@ -6,7 +6,7 @@ float lerp (float from, float to, float amount) {
 }
 
 void Key::Update(float delta) {
-	seconds_alive += delta;
+	rotation += delta * rotation_speed;
 }
 
 void Key::Draw() {
@@ -32,7 +32,7 @@ void Key::Draw() {
 
 	glm::mat4 model = glm::mat4(1);
 	model = glm::translate(model, (glm::vec3) pos);
-	model = glm::rotate(model, rotation_speed * seconds_alive, glm::vec3(0.0f, 0.0f, 1.0f));
+	model = glm::rotate(model, rotation, glm::vec3(0.0f, 0.0f, 1.0f));
 	model = glm::rotate(model, PI / 2.f, glm::vec3(0.0f, 1.0f, 0.0f));
 	GLint uniModel = glGetUniformLocation(ds_models.shader, "model");
 	glUniformMatrix4fv(uniModel, 1, GL_FALSE, glm::value_ptr(model));

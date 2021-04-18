@@ -83,8 +83,7 @@ struct Key {
 	KEY_COLOR col = BRONZE;
 	float width;
 	float rotation_speed;
-
-	float seconds_alive = 0.0;
+	float rotation = 0.0;
 
 
 	void Update(float delta);

@@ -252,9 +252,21 @@ void Level::Draw() {
 	glUseProgram(ds_models.shader);
 	glBindVertexArray(ds_models.vao);
 
-	for (Key& key : keys)
-		if (!player.keys[key.col])
-			key.Draw();
+	float offset = -0.1;
+	for (Key& key : keys) {
+		if (player.keys[key.col]) {
+			offset += 0.1;
+			key.pos = player.logic_pos;
+			key.pos.z -= 0.3;
+			vec3 ld = player.look_dir;
+			ld.z = 0;
+			ld = ld.normalized();
+			vec3 right = cross(ld, vec3::up());
+			key.pos += right * offset;
+			key.rotation = ld.yaw() + PI / 2.f;
+		}
+		key.Draw();
+	}
 	for (Door& door : doors)
 		door.Draw();
 	goal.Draw();
