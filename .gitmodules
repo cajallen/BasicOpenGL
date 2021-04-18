@@ -1,0 +1,15 @@
+[submodule "src/lib/ImGuizmo"]
+	path = src/lib/ImGuizmo
+	url = https://github.com/cajallen/ImGuizmo.git
+[submodule "src/lib/SDL"]
+	path = src/lib/SDL
+	url = https://github.com/cajallen/SDL.git
+[submodule "src/lib/imgui"]
+	path = src/lib/imgui
+	url = https://github.com/cajallen/imgui.git
+[submodule "src/lib/stb"]
+	path = src/lib/stb
+	url = https://github.com/cajallen/stb.git
+[submodule "src/lib/glad"]
+	path = src/lib/glad
+	url = https://github.com/cajallen/glad
