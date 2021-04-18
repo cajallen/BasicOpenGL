@@ -31,7 +31,6 @@ Extra Details - https://www.youtube.com/watch?v=GLfKier6Eo0
 
 #### Miscellaneous
 (5) Make a video of yourself playing, showcasing your features  
-(5) Two artistic/well-composedscreenshotsfrom your game  
 
 
 #### Struggles
