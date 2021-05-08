@@ -1,33 +1,53 @@
-#version 150 core
+#version 330 core
 
 const float ambient_comp = .3;
 
 in VS_OUT {
     vec3 pos;
     vec3 texcoord;
-    vec3 tangent_light_pos;
+    vec3 tangent_light_dir;
     vec3 tangent_view_pos;
     vec3 tangent_pos;
+	vec4 shadowcoord;
 } fs_in;
 
-out vec4 outColor;
+layout(location = 0) out vec4 outColor;
 
-uniform sampler2DArray tex;
+uniform sampler2DArray tex; // once
+uniform sampler2DShadow shadow_tex; // once
+uniform vec3 ambient_col; // once per frame per object
+uniform vec3 diffuse_col; // once per frame per object
+uniform vec3 specular_col; // once per frame per object
+uniform float phong; // once per frame per object
+
+vec2 poissonDisk[4] = vec2[](
+  vec2(-1,-.5),
+  vec2( 1, .5),
+  vec2(-.5, 1),
+  vec2( .5,-1)
+);
 
 vec4 calc_lighting_cont(vec3 diff_in, vec3 spec_in, vec3 norm) {
-	float light_dist = length(fs_in.tangent_light_pos - fs_in.tangent_pos);
-	vec3 ambient = ambient_comp * diff_in;
+	vec3 ambient = ambient_col * ambient_comp * diff_in;
 
-    vec3 light_dir = normalize(fs_in.tangent_light_pos - fs_in.tangent_pos);
+    vec3 light_dir = -normalize(fs_in.tangent_light_dir);
     float diff_comp = max(dot(light_dir, norm), 0.0);
-    vec3 diffuse = diff_comp * diff_in / light_dist;
+    vec3 diffuse = diffuse_col * diff_comp * diff_in;
 
     vec3 view_dir = normalize(fs_in.tangent_view_pos - fs_in.tangent_pos);
     vec3 halfway_dir = normalize(light_dir + view_dir);  
-    float spec_comp = pow(max(dot(norm, halfway_dir), 0.0), 8);
-    vec3 specular = spec_in * spec_comp / light_dist;
+    float spec_comp = pow(max(dot(norm, halfway_dir), 0.0), phong);
+    vec3 specular = specular_col * spec_in * spec_comp;
 
-    return vec4(ambient + diffuse + specular, 1.0);
+	float bias = 0.0006*tan(acos(diff_comp));
+	bias = clamp(bias, 0, 0.01);
+	float visibility = 1.0;
+	if (diff_comp > 0) {
+		for (int i =0; i < 4; i++) {
+			visibility -= 0.25*(1.0-texture(shadow_tex, vec3(fs_in.shadowcoord.xy + poissonDisk[i]/4500.0,  (fs_in.shadowcoord.z-bias)/fs_in.shadowcoord.w)));
+		}
+	}
+    return vec4(ambient, 1.0) + visibility * vec4(diffuse + specular, 1.0);
 }
 
 void main() {

@@ -29,8 +29,6 @@ struct ModelRange {
 };
 
 struct DrawSet {
-	GLuint fragment;
-	GLuint vertex;
 	GLuint shader;
 	GLuint vao;
 	GLuint vbo;
@@ -45,8 +43,8 @@ extern SDL_Window* window;
 extern ImGuiIO* io;
 extern SDL_Cursor* cursor;
 extern Level* level;
-extern DrawSet ds_world;
-extern DrawSet ds_models;
+extern DrawSet ds_main;
+extern DrawSet ds_shadows;
 extern ModelRange model_world;
 extern map<string, ModelRange> models;
 

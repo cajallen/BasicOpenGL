@@ -84,6 +84,10 @@ struct vec3 {
         return *this;
     }
 
+	vec3 operator*(vec3& rhs) {
+		return vec3(x*rhs.x, y*rhs.y, z*rhs.z);
+	}
+
 	bool operator==(vec3& rhs) {
 		return x == rhs.x && y == rhs.y && z == rhs.z;
 	}
@@ -175,7 +179,7 @@ inline vec3 YawPitch(float yaw, float pitch) {
 }
 
 inline vec3::vec3(int bin) {
-	z = bin & 0b1 ? 0.0 : -0.5;
+	z = bin & 0b1 ? 0.5 : -0.5;
 	y = bin & 0b10 ? 0.5 : -0.5;
 	x = bin & 0b100 ? 0.5 : -0.5;
 }

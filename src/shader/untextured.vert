@@ -1,10 +1,9 @@
-#version 150 core
+#version 330 core
 
 in vec3 inPosition;
 in vec3 inNormal;
 in vec3 inTexcoord;
 in vec3 inTangent;
-in vec3 inBitangent;
 
 out VS_OUT {
     vec3 pos;

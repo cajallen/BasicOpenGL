@@ -15,6 +15,9 @@
 #include <string>
 #include <vector>
 #include <stb_image.h>
+#include <sstream>
+#include <fstream>
+#include <fmt/format.h>
 
 #include "globals.h"
 #include "log.h"
@@ -25,6 +28,7 @@
 #include "obj_loader.h"
 
 using namespace std;
+using namespace fmt;
 
 GLuint LoadVertexSource(string s);
 GLuint LoadFragmentSource(string s);

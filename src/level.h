@@ -17,21 +17,22 @@ struct Level {
 	// up is defined as 0,0,1, so we typically ignore the third coordinate here
 	vector<vec3i> walls;
 	vector<vec3i> floors;
-	vector<Key> keys;
-	vector<Door> doors;
-	Goal goal;
+	vector<Key*> keys;
+	vector<Door*> doors;
+	Goal* goal;
 	Player player;
 	vec3i start_pos;
 	vec3i end_pos;
 
 	Level();
 	Level(string s);
+	~Level();
 
 	vector<Vertex> GenerateWalls();
 	vector<Vertex> GenerateFloors();
 	float GetHeightAt(float x, float y, float width);
 	void Update(float delta);
-	void Draw();
+	void Draw(DrawSet ds);
 	void MovePlayer();
 };
 

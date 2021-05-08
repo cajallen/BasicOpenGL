@@ -21,6 +21,8 @@
   <ItemGroup>
     <ClCompile Include="src\key.cpp" />
     <ClCompile Include="src\level.cpp" />
+    <ClCompile Include="src\lib\fmt\src\format.cc" />
+    <ClCompile Include="src\lib\fmt\src\os.cc" />
     <ClCompile Include="src\lib\glad\glad.c" />
     <ClCompile Include="src\lib\image_lib.cpp" />
     <ClCompile Include="src\lib\ImGuizmo\ImGuizmo.cpp" />
@@ -41,6 +43,18 @@
     <ClInclude Include="src\imgui_ex.h" />
     <ClInclude Include="src\key.h" />
     <ClInclude Include="src\level.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\chrono.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\color.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\compile.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\core.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\format-inl.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\format.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\locale.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\os.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\ostream.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\posix.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\printf.h" />
+    <ClInclude Include="src\lib\fmt\include\fmt\ranges.h" />
     <ClInclude Include="src\lib\glad\glad.h" />
     <ClInclude Include="src\lib\glad\khrplatform.h" />
     <ClInclude Include="src\lib\image_lib.h" />
@@ -204,12 +218,12 @@
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>src;src\lib;src\lib\imgui;src\lib\geom_lib;src\lib\ImGuizmo;src\lib\SDL\include;src\lib\stb;src\lib\imgui\backends;$(IncludePath)</IncludePath>
+    <IncludePath>src;src\lib;src\lib\imgui;src\lib\geom_lib;src\lib\ImGuizmo;src\lib\SDL\include;src\lib\stb;src\lib\imgui\backends;C:\Users\cajal\Documents\School\2021SPRING\Graphics\FinalProject\src\lib\fmt\include;$(IncludePath)</IncludePath>
     <LibraryPath>src\lib\SDL\lib\x64;$(LibraryPath)</LibraryPath>
     <SourcePath>C:\Users\cajal\Documents\School\2021SPRING\Graphics\Project4\src;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>src;src\lib;src\lib\imgui;src\lib\geom_lib;src\lib\ImGuizmo;src\lib\SDL\include;src\lib\stb;src\lib\imgui\backends;$(IncludePath)</IncludePath>
+    <IncludePath>src;src\lib;src\lib\imgui;src\lib\geom_lib;src\lib\ImGuizmo;src\lib\SDL\include;src\lib\stb;src\lib\imgui\backends;C:\Users\cajal\Documents\School\2021SPRING\Graphics\FinalProject\src\lib\fmt\include;$(IncludePath)</IncludePath>
     <LibraryPath>src\lib\SDL\lib\x64;$(LibraryPath)</LibraryPath>
     <SourcePath>C:\Users\cajal\Documents\School\2021SPRING\Graphics\Project4\src;$(SourcePath)</SourcePath>
   </PropertyGroup>

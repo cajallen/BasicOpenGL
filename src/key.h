@@ -67,49 +67,51 @@ inline float GetKeyPhong(KEY_COLOR col) {
 	}
 }
 
-inline int DoKeySpecial(KEY_COLOR col) {
-	switch (col) {
-	case (ADAMANT): return 0;
-	case (BRONZE): return 0;
-	case (COBALT): return 5;
-	case (OBSIDIAN): return 0;
-	case (TUNGSTEN): return 12;
-	}
-}
+struct Entity {
+	string model_name;
+	vec3 position = vec3(0,0,0);
+	vec3 amb_tint = vec3(1,1,1);
+	vec3 diff_tint = vec3(1,1,1);
+	vec3 spec_tint = vec3(1,1,1);
+	float phong = 8;
+
+	glm::mat4 model = glm::mat4(1);
+
+	float lifetime = 0.0;
+
+	Entity(vec3 pos) : position(pos) {}
+
+	void Update(float delta);
+	void UpdateUniforms(DrawSet ds);
+	void Draw(DrawSet ds);
+};
 
 
-struct Key {
-	vec3 pos;
-	KEY_COLOR col = BRONZE;
+struct Key : Entity {
+	KEY_COLOR color;
 	float width;
 	float rotation_speed;
 	float rotation = 0.0;
 
-
+	Key(vec3 pos, KEY_COLOR col, float rot_spd, float wid);
 	void Update(float delta);
-	void Draw();
 };
 
-struct Door {
-	vec3 pos;
-	KEY_COLOR col = BRONZE;
+struct Door : Entity {
+	KEY_COLOR color;
 
-	float seconds_alive = 0.0;
 	float opened_at = 0.0;
 
+	Door(vec3 pos, KEY_COLOR col);
 	void Update(float delta);
-	void Draw();
 	void Open();
-
 	bool IsOpen();
 };
 
-struct Goal {
-	vec3 pos;
-	float seconds_alive =  0.0;
+struct Goal : Entity{
+	float rotation_speed = 0.0;
+	float rotation = 0.0;
 
-	float rotation_speed = 0.5;
-
+	Goal(vec3 pos, float rot_spd);
 	void Update(float delta);
-	void Draw();
 };

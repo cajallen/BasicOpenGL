@@ -1,4 +1,4 @@
-#version 150 core
+#version 330 core
 
 const float ambient_comp = .3;
 
@@ -10,7 +10,7 @@ in VS_OUT {
     vec3 tangent_pos;
 } fs_in;
 
-out vec4 outColor;
+layout(location = 0) out vec4 outColor;
 
 
 uniform sampler2DArray tex;
