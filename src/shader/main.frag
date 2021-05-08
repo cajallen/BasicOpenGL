@@ -39,7 +39,7 @@ vec4 calc_lighting_cont(vec3 diff_in, vec3 spec_in, vec3 norm) {
     float spec_comp = pow(max(dot(norm, halfway_dir), 0.0), phong);
     vec3 specular = specular_col * spec_in * spec_comp;
 
-	float bias = 0.0006*tan(acos(diff_comp));
+	float bias = 0.0007*tan(acos(diff_comp));
 	bias = clamp(bias, 0, 0.01);
 	float visibility = 1.0;
 	if (diff_comp > 0) {

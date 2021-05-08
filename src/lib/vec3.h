@@ -38,6 +38,10 @@ struct vec3i {
 		return x == oth.x && y == oth.y && z == oth.z;
 	}
 
+	vec3i operator - (const vec3i& oth) const {
+		return vec3i(x - oth.x, y - oth.y, z - oth.z);
+	}
+
     operator vec3() const;
 };
 
@@ -171,7 +175,6 @@ inline vec3i::operator vec3() const {
 }
 
 inline vec3 YawPitch(float yaw, float pitch) {
-	pitch = fclamp(pitch, -HPI + 0.01, HPI - 0.01);
 	float x = cos(pitch) * cos(yaw);
 	float y = cos(pitch) * sin(yaw);
 	float z = sin(pitch);

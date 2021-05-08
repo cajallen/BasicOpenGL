@@ -1,6 +1,7 @@
 #include "player.h"
 
 void Player::HandleInput(SDL_Event* event) {
+	if (io->WantCaptureMouse) using_mouse = false;
 	if (!io->WantCaptureMouse && (event->type == SDL_MOUSEMOTION) && using_mouse && !warped) {
 		int s_wid, s_hei;
 		SDL_GetWindowSize(window, &s_wid, &s_hei);
@@ -10,7 +11,7 @@ void Player::HandleInput(SDL_Event* event) {
 			SDL_WarpMouseInWindow(window, s_wid / 2, s_hei / 2);
 		}
 	}
-	if (!io->WantCaptureKeyboard && (event->type == SDL_KEYDOWN || event->type == SDL_KEYUP)) {	 // handle wasd input
+	if ((!io->WantCaptureKeyboard && event->type == SDL_KEYDOWN) || event->type == SDL_KEYUP) {	 // handle wasd input
 		bool key_down = event->type == SDL_KEYDOWN;
 		char key = event->key.keysym.sym;
 		if (key == SDLK_SPACE)
@@ -98,6 +99,9 @@ void Player::Update(float delta) {
 	ImGui::Begin("Log");
 	yaw *= RAD2DEG;
 	pitch *= RAD2DEG;
+
+	pitch = fclamp(pitch, -89.5, 89.5);
+
 	if (ImGui::TreeNode("Player")) {
 		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Position").x - ImGui::GetStyle().WindowPadding.x);
 		ImGui::DragFloat3("Position##Player", &logic_pos.x, 0.05);
@@ -105,10 +109,7 @@ void Player::Update(float delta) {
 		ImGui::DragFloat("Yaw##Player", &yaw, 0.2);
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
-		ImGui::DragFloat("Pitch##Player", &pitch, 0.2);
-		ImGui::TreePop();
-	}
-	if (ImGui::TreeNode("Settings")) {
+		ImGui::DragFloat("Pitch##Player", &pitch, 0.2, -89.5, 89.5);
 		ImGui::DragFloat("Camera Speed", &pan_speed, 0.0001, 0.0005, 0.05, "%.4f");
 		ImGui::DragFloat("Move Speed", &move_speed, 0.05);
 		ImGui::DragFloat("Jump Speed", &jump_speed, 0.05);

@@ -1,5 +1,26 @@
 #include "main.h"
 
+/*
+UNIFORM UPDATES
+
+// depth_rtt.vert
+uniform mat4 model; // once per object per frame : Done in Entity::UpdateUniforms
+uniform mat4 VP; // once per light direction change : Done in UpdateLightDir
+
+// main.vert
+uniform mat4 model; // once per frame per object : Done in Entity::UpdateUniforms
+uniform mat4 VP; // once per frame : Done in UPDATE_UNIFORMS in main
+uniform mat4 DepthBiasVP; // once per light direction change : Done in UpdateLightDir
+//main.frag
+uniform vec3 view_pos; // once per frame : Done in UPDATE_UNIFORMS in main
+uniform vec3 light_dir; // once per light direction change : Done in UpdateLightDir
+uniform sampler2DArray tex; // once : Done in GenVertexObjects
+uniform sampler2DShadow shadow_tex; // once : Done in GenVertexObjects
+uniform vec3 ambient_col; // once per frame per object : Done in Entity::UpdateUniforms
+uniform vec3 diffuse_col; // once per frame per object : Done in Entity::UpdateUniforms
+uniform vec3 specular_col; // once per frame per object : Done in Entity::UpdateUniforms
+uniform float phong; // once per frame per object : Done in Entity::UpdateUniforms
+*/
 bool fullscreen = false;
 float screen_width = 1900;
 float screen_height = 1000;
@@ -17,7 +38,10 @@ const char* glsl_version = "#version 330";
 
 float aspect;
 SDL_GLContext context;
-vec3 light_dir(-1,-1,-2);
+vec3 light_dir = vec3(-1,-1,-2).normalized();
+
+bool do_daylight_cycle;
+float daylight_time;
 
 
 struct {
@@ -145,8 +169,8 @@ bool LoadAtlasFromFiles(vector<string> file_names, GLuint* out_texture) {
     // Setup filtering parameters for display
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
     *out_texture = image_texture;
     return true;
@@ -209,7 +233,7 @@ void GenShadowsVertexObjects(GLuint* vao, GLuint* vbo, GLuint shader) {
 vector<Vertex> LoadLevelFromFile(string file_name) {
 	delete level;
 	level = LoadLevel(file_name);
-	if (level->walls.size() == 0) {
+	if (level->heightmap.size() == 0) {
 		Log(file_name + " is invalid level");
         return {};
 	}
@@ -235,7 +259,7 @@ int InitializeEnv() {
 
     // Create a window (offsetx, offsety, width, height, flags)
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
-	window = SDL_CreateWindow("Project 4, Renderer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, screen_width, screen_height, window_flags);
+	window = SDL_CreateWindow("Basic OpenGL", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, screen_width, screen_height, window_flags);
     aspect = screen_width / (float)screen_height;
 
     // Create a context to draw in
@@ -290,7 +314,7 @@ void DrawWorld(DrawSet ds) {
 
 void UpdateLightDir() {
 	glm::vec3 light_inv_dir = glm::vec3(-light_dir.x, -light_dir.y, -light_dir.z);
-	glm::mat4 depth_proj = glm::ortho(-8.f, 8.f, -8.f, 8.f, -8.f, 8.f);
+	glm::mat4 depth_proj = glm::ortho(-12.f, 12.f, -12.f, 12.f, -8.f, 8.f);
 	glm::mat4 depth_view = glm::lookAt(light_inv_dir, glm::vec3(0,0,0), glm::vec3(0,1,0));
 	glm::mat4 depth_vp = depth_proj * depth_view;
 
@@ -310,20 +334,53 @@ void UpdateLightDir() {
 	glUniformMatrix4fv(main_shader_loc.db_vp, 1, GL_FALSE, glm::value_ptr(depth_bias_vp));
 }
 
+bool DrawLightDirWidget() {
+	float yaw = light_dir.yaw();
+	float pitch = light_dir.pitch();
+
+	bool changed = false;
+
+	if (ImGui::TreeNode("Light")) {
+		ImGui::Checkbox("Automate Daylight", &do_daylight_cycle);
+		yaw *= RAD2DEG;
+		pitch *= RAD2DEG;
+		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvailWidth() / 2.0 - ImGui::CalcTextSize("Yaw").x);
+		changed |= ImGui::DragFloat("Yaw##Light", &yaw, 0.2);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
+		changed |= ImGui::DragFloat("Pitch##Light", &pitch, 0.2, -175, -5);
+		
+		if (changed)
+			do_daylight_cycle = false;
+
+		yaw *= DEG2RAD;
+		pitch *= DEG2RAD;
+
+		ImGui::TreePop();
+	}
+
+	if (!changed && do_daylight_cycle) {
+		yaw = 0.5 * daylight_time;
+		pitch = -4 * PI / 6 + (PI / 6) * cos(0.5 * daylight_time);
+	}
+
+	light_dir = YawPitch(yaw, pitch);
+	return changed || do_daylight_cycle;
+}
+
 void DrawMenus() {
-	ImGui::ShowDemoWindow();
+	//ImGui::ShowDemoWindow();
 	ImGui::Begin("Log");
 	{
-		static string level_string = "assets/scenes/set.txt";
-		ImGui::InputText("Level", &level_string);
+		static string level_string = "assets/scenes/set3.txt";
+		ImGui::Text("Level", &level_string);
 		ImGui::SameLine();
-		if (ImGui::SmallButton("Load")) {
+		if (ImGui::SmallButton("Restart")) {
 			vector<Vertex> geometry_data = LoadLevelFromFile(level_string);
-			//model_world.size = geometry_data.size();
-			//glBindBuffer(GL_ARRAY_BUFFER, ds_main.vbo);
-			//glBufferData(GL_ARRAY_BUFFER, geometry_data.size() * sizeof(Vertex), geometry_data.data(), GL_STATIC_DRAW);
 		}
-		if (ImGui::DragFloat3("Light dir", &light_dir.x, 0.1)) {
+
+
+		if (DrawLightDirWidget()) {
 			UpdateLightDir();
 		}
 		for (Key* key : level->keys) {
@@ -368,7 +425,7 @@ int main(int argc, char* argv[]) {
 	LoadAtlasFromFiles({
 		"assets/floor.png", "assets/floor_specular.png", "assets/floor_normal.png",
 		"assets/wall_top.png", "assets/wall_top_specular.png", "assets/wall_top_normal.png", 
-		"assets/noise.png", "assets/noise.png", "assets/noise.png"}, &tex_id
+		"assets/noise_diffuse.png", "assets/noise_specular.png", "assets/noise.png"}, &tex_id
 	);
 	// END TEXTURE0
 
@@ -379,7 +436,7 @@ int main(int argc, char* argv[]) {
 	GenDefaultVertexObjects(&ds_main.vao, &ds_main.vbo, ds_main.shader);
 	GenShadowsVertexObjects(&ds_shadows.vao, &ds_shadows.vbo, ds_shadows.shader);
 
-	vector<Vertex> geometry_data = LoadLevelFromFile("assets/scenes/set.txt");
+	vector<Vertex> geometry_data = LoadLevelFromFile("assets/scenes/set3.txt");
 	model_world.start_pos = 0;
     model_world.size = geometry_data.size();
 
@@ -398,10 +455,6 @@ int main(int argc, char* argv[]) {
 	glBindBuffer(GL_ARRAY_BUFFER, ds_main.vbo);
 	glBufferData(GL_ARRAY_BUFFER, geometry_data.size() * sizeof(Vertex), geometry_data.data(), GL_STATIC_DRAW);
 
-	//glBindBuffer(GL_ARRAY_BUFFER, ds_shadows.vbo);
-	//glBufferData(GL_ARRAY_BUFFER, geometry_data.size() * sizeof(Vertex), geometry_data.data(), GL_STATIC_DRAW);
-	//glBindBuffer(GL_ARRAY_BUFFER, 0);
-	
 	glActiveTexture(GL_TEXTURE1);
 
 	GLuint framebuffer;
@@ -427,37 +480,6 @@ int main(int argc, char* argv[]) {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	UpdateLightDir();
-
-/*
-    { // initialize model geometry
-		ds_models.shader = LoadShaders("src/shader/untextured.vert", "src/shader/untextured.frag");
-        glUseProgram(ds_models.shader);
-
-        GenDefaultVertexObjects(&ds_models.vao, &ds_models.vbo, ds_models.shader);
-
-        GLint tex_loc = glGetUniformLocation(ds_models.shader, "tex");
-        glUniform1i(tex_loc, 0);
-
-        glm::mat4 model = glm::mat4(1);
-        GLint uniModel = glGetUniformLocation(ds_models.shader, "model");
-        glUniformMatrix4fv(uniModel, 1, GL_FALSE, glm::value_ptr(model));
-
-        vector<Vertex> geometry_data;
-        vector<Vertex> model_data;
-
-        for (string model_name : { "key", "door", "goal" }) {
-		    model_data = LoadModelFromFile("assets/models/" + model_name + ".obj", 6);
-            ModelRange range;
-            range.start_pos = geometry_data.size();
-            geometry_data.insert(geometry_data.end(), model_data.begin(), model_data.end());
-		    range.size = geometry_data.size() - range.start_pos;
-            models.insert({ model_name, range });
-        }
-
-		glBindBuffer(GL_ARRAY_BUFFER, ds_models.vbo);
-		glBufferData(GL_ARRAY_BUFFER, geometry_data.size() * sizeof(Vertex), geometry_data.data(), GL_STATIC_DRAW);
-	}
-*/
 	
 	glEnable(GL_DEPTH_TEST);
 	// glEnable(GL_BLEND);
@@ -472,6 +494,19 @@ int main(int argc, char* argv[]) {
     while (!quit) {
 		quit = HandleInput();
 
+		this_frame = SDL_GetTicks() / 1000.f;
+		float delta = this_frame - last_frame;
+		last_frame = SDL_GetTicks() / 1000.f; // get last frame after we are done with logic, not rendering
+
+		ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL2_NewFrame(window);
+        ImGui::NewFrame();
+
+		level->Update(delta);
+		daylight_time += delta;
+		
+		DrawMenus();
+
 		// START DRAW SHADOWMAP
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 		glViewport(0, 0, 4096, 4096);
@@ -482,18 +517,7 @@ int main(int argc, char* argv[]) {
 		level->Draw(ds_shadows);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		// END DRAW SHADOWMAP
-		
-		this_frame = SDL_GetTicks() / 1000.f;
-		float delta = this_frame - last_frame;
-		last_frame = SDL_GetTicks() / 1000.f; // get last frame after we are done with logic, not rendering
-
-		ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame(window);
-        ImGui::NewFrame();
-
-		level->Update(delta);
-
-		DrawMenus();
+	
 		ImGui::Render();
 		
 		// START DRAW MAIN

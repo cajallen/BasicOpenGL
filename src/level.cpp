@@ -1,5 +1,7 @@
 #include "level.h"
 
+float tile_height = 0.25;
+
 
 KEY_COLOR GetColorFromChar(char c) {
 	switch(c) {
@@ -30,14 +32,22 @@ Level::Level(string s) {
 
 	// parse level & instance objects
 	for (char c : s) {
-		if (c == 'G' || c == 'S' || c == '0') {
+		if (c == 'G' || c == 'S') {
 			start_pos = c == 'S' ? pos : start_pos;
 			end_pos = c == 'G' ? pos : end_pos;
-			floors.push_back(pos);
+			heightmap.push_back(vec3i(pos.x, pos.y, 0));
 			pos.x++;
 		}
-		else if (c == 'W') {
-			walls.push_back(pos);
+		else if (isdigit(c)) {
+			heightmap.push_back(vec3i(pos.x, pos.y, c - '0'));
+			pos.x++;
+		}
+		else if (c == '!') {
+			heightmap.push_back(vec3i(pos.x, pos.y, -1));
+			pos.x++;
+		}
+		else if (c == '#') {
+			heightmap.push_back(vec3i(pos.x, pos.y, -2));
 			pos.x++;
 		}
 		else if (c == '\n') {
@@ -51,7 +61,10 @@ Level::Level(string s) {
 			else {
 				keys.push_back(new Key((vec3) pos, GetColorFromChar(c), 1.0, 0.2));
 			}
-			floors.push_back(pos);
+			heightmap.push_back(vec3i(pos.x, pos.y, 0));
+			pos.x++;
+		}
+		else if (c == ' ') {
 			pos.x++;
 		}
 		else {
@@ -74,7 +87,67 @@ Level::~Level() {
 		delete dp;
 }
 
+vector<Vertex> GenerateFloor(vec3i pos) {
+	float wall_z_coord = pos.z > 0 ? 3.0 : 0.0;
+	vec3 posi = vec3(pos.x, pos.y, pos.z * 0.25);
+	vector<Vertex> vertices = {
+	Vertex{ posi + vec3(-.5, -.5, 0.), vec3::up(), vec3(0, 0, wall_z_coord) },
+	Vertex{ posi + vec3( .5, -.5, 0.), vec3::up(), vec3(1, 0, wall_z_coord) },
+	Vertex{ posi + vec3( .5,  .5, 0.), vec3::up(), vec3(1, 1, wall_z_coord) },
+	Vertex{ posi + vec3( .5,  .5, 0.), vec3::up(), vec3(1, 1, wall_z_coord) },
+	Vertex{ posi + vec3(-.5,  .5, 0.), vec3::up(), vec3(0, 1, wall_z_coord) },
+	Vertex{ posi + vec3(-.5, -.5, 0.), vec3::up(), vec3(0, 0, wall_z_coord) }
+	};
+
+	for (int i = 0; i + 2 < vertices.size(); i += 3) {
+		SetTriTangents(vertices[i], vertices[i + 1], vertices[i + 2]);
+	}
+	return vertices;
+}
+
+vector<Vertex> GenerateFace(vec3i pos1, vec3i pos2) {
+	vec3i pos_diff = pos1 - pos2;
+	vec3 wall_center = vec3((pos1.x + pos2.x) / 2.0, (pos1.y + pos2.y) / 2.0, 0);
+	int keep_dir = pos_diff.z > 0 ? -1 : 1;
+
+	vec3 norm;
+	if (abs(pos_diff.x) == 1)
+		norm = keep_dir * pos_diff.x * vec3::right();
+	else if (abs(pos_diff.y) == 1)
+		norm = keep_dir * pos_diff.y * vec3::forward();
+	else 
+		IM_ASSERT(false && "GenerateFace called with bad pos1/pos2");
+
+	vector<Vertex> vertices{};
+	while (pos1.z != pos2.z) {
+		float wall_z_coord = pos1.z < 0 ? 3.0 : 3.0;
+		vec3 min_pos;
+		vec3 max_pos;
+		min_pos.x = wall_center.x + 0.5 * min(pos_diff.y, -pos_diff.y);
+		max_pos.x = wall_center.x + 0.5 * max(pos_diff.y, -pos_diff.y);
+		min_pos.y = wall_center.y + 0.5 * min(pos_diff.x, -pos_diff.x);
+		max_pos.y = wall_center.y + 0.5 * max(pos_diff.x, -pos_diff.x);
+		min_pos.z = 0.25 * min(pos1.z, pos1.z + keep_dir);
+		max_pos.z = 0.25 * max(pos1.z, pos1.z + keep_dir);
+		vertices.push_back(Vertex{ vec3(max_pos.x, max_pos.y, min_pos.z), norm, vec3(1, min_pos.z, wall_z_coord) }); // bottom right
+		vertices.push_back(Vertex{ vec3(max_pos.x, max_pos.y, max_pos.z), norm, vec3(1, max_pos.z, wall_z_coord) }); // top right
+		vertices.push_back(Vertex{ vec3(min_pos.x, min_pos.y, min_pos.z), norm, vec3(0, min_pos.z, wall_z_coord) }); // bottom left
+		vertices.push_back(Vertex{ vec3(min_pos.x, min_pos.y, max_pos.z), norm, vec3(0, max_pos.z, wall_z_coord) }); // top left
+		vertices.push_back(Vertex{ vec3(min_pos.x, min_pos.y, min_pos.z), norm, vec3(0, min_pos.z, wall_z_coord) }); // bottom left
+		vertices.push_back(Vertex{ vec3(max_pos.x, max_pos.y, max_pos.z), norm, vec3(1, max_pos.z, wall_z_coord) }); // top right
+		pos1.z += keep_dir;
+	}
+
+	for (int i = 0; i + 2 < vertices.size(); i += 3) {
+		SetTriTangents(vertices[i], vertices[i + 1], vertices[i + 2]);
+	}
+	return vertices;
+}
+
 vector<Vertex> GenerateCube(vec3i pos, vec3 scale=vec3(1,1,1)) {
+
+	GenerateFace(vec3i(3, 0, 4), vec3i(3, 1, 2));
+
 	float wall_z_coord = 3.0;
 	vector<Vertex> vertices = {
 		Vertex{pos + scale*vec3(0b001), vec3::up(),      vec3(0, 0, 		wall_z_coord)},
@@ -117,7 +190,7 @@ vector<Vertex> GenerateCube(vec3i pos, vec3 scale=vec3(1,1,1)) {
 	}
 	return vertices;
 }
-
+/*
 vector<Vertex> GenerateFloor(vec3i pos, vec3 scale=vec3(1,1,1)) {
 	float floor_z_coord = 0.0;
 	vector<Vertex> vertices = {
@@ -132,20 +205,41 @@ vector<Vertex> GenerateFloor(vec3i pos, vec3 scale=vec3(1,1,1)) {
 	SetTriTangents(vertices[3], vertices[4], vertices[5]);
 	return vertices;
 }
-
+*/
 vector<Vertex> Level::GenerateWalls() {
 	vector<Vertex> vertices{};
-	for (vec3i wall : walls) {
-		vector<Vertex> w_verts = GenerateCube(wall, vec3(1,1,0.5));
-		vertices.insert(vertices.end(), w_verts.begin(), w_verts.end());
+	for (vec3i pos1 : heightmap) {
+		auto v3it1 = find_if(heightmap.begin(), heightmap.end(), [pos1](vec3i oth) { return oth.x == pos1.x + 1 && oth.y == pos1.y; });
+		vec3i pos2 = v3it1 == heightmap.end() ? vec3i(pos1.x + 1, pos1.y, -3) : *v3it1;
+		
+		auto v3it2 = find_if(heightmap.begin(), heightmap.end(), [pos1](vec3i oth) { return oth.x == pos1.x && oth.y == pos1.y + 1; });
+		vec3i pos3 = v3it2 == heightmap.end() ? vec3i(pos1.x, pos1.y + 1, -3) : *v3it2;
+
+		vector<Vertex> right_face = GenerateFace(pos1, pos2);
+		vector<Vertex> down_face = GenerateFace(pos1, pos3);
+
+		vertices.insert(vertices.end(), right_face.begin(), right_face.end());
+		vertices.insert(vertices.end(), down_face.begin(), down_face.end());
+
+		// CHECK FOR UNFINISHED UPLEFT
+		auto v3it3 = find_if(heightmap.begin(), heightmap.end(), [pos1](vec3i oth) { return oth.x == pos1.x - 1 && oth.y == pos1.y; });
+		if (v3it3 == heightmap.end()) {
+			vector<Vertex> left_face = GenerateFace(pos1, vec3i(pos1.x - 1, pos1.y, -3));
+			vertices.insert(vertices.end(), left_face.begin(), left_face.end());
+		}
+		auto v3it4 = find_if(heightmap.begin(), heightmap.end(), [pos1](vec3i oth) { return oth.x == pos1.x && oth.y == pos1.y - 1; });
+		if (v3it4 == heightmap.end()) {
+			vector<Vertex> left_face = GenerateFace(pos1, vec3i(pos1.x, pos1.y - 1, -3));
+			vertices.insert(vertices.end(), left_face.begin(), left_face.end());
+		}
 	}
 	return vertices;
 }
 
 vector<Vertex> Level::GenerateFloors() {
 	vector<Vertex> vertices{};
-	for (vec3i floor : floors) {
-		vector<Vertex> f_verts = GenerateFloor(floor, vec3(1,1,0.5));
+	for (vec3i floor : heightmap) {
+		vector<Vertex> f_verts = GenerateFloor(floor);
 		vertices.insert(vertices.end(), f_verts.begin(), f_verts.end());
 	}
 	return vertices;
@@ -161,13 +255,11 @@ float Level::GetHeightAt(float x, float y, float width) {
 	for (vec3i pos : {bl, br, tl, tr}) {
 		if (auto door_it = find_if(doors.begin(), doors.end(), [pos](Door* lhs) { return lhs->position == (vec3) pos; }); door_it != doors.end())
 			if (!player.keys[(*door_it)->color])
-				height = fmax(height, 1.45);
-		if (find(walls.begin(), walls.end(), pos) != walls.end())
-			height = fmax(height, .25);
+				height = fmax(height, 1.75);
+		vector<vec3i>::iterator v3it = find_if(heightmap.begin(), heightmap.end(), [pos](vec3i oth) { return oth.x == pos.x && oth.y == pos.y; } );
+		if (v3it != heightmap.end())
+			height = fmax(height, 0.25 * v3it->z);
 	}
-
-	if (find(floors.begin(), floors.end(), vec3i(round(x),round(y),0)) != floors.end())
-		height = fmax(height, -.25);
 	return height;
 }
 
@@ -184,17 +276,22 @@ Level* LoadLevel(string file_name) {
 }
 
 void Level::Update(float delta) {
-
 	static bool displayed_start = false;
 	if (!displayed_start) {
-		displayed_start = true;
-		ImGui::OpenPopup("StartScreen");
+		ImGui::OpenPopup("Start");
 	}
-	bool temp;
-	if (ImGui::BeginPopupModal("StartScreen", &temp)) {
-		ImGui::Text("Your friend got lost. Find him!");
+	bool temp = true;
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("Start", &temp, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::Text("Your friend got lost. Find him!\nQ: Toggle mouse\nWASD: Movement\nZ: Fly\nEsc: Exit");
 		ImGui::EndPopup();
 	}
+	else {
+		displayed_start = true;
+	}
+
+
 	player.Update(delta);
 	if (!player.noclip)
 		MovePlayer();
@@ -210,7 +307,7 @@ void Level::Update(float delta) {
 		if (player.keys[key->color]) {
 			offset += 0.1;
 			key->position = player.logic_pos;
-			key->position.z -= 0.3;
+			key->position.z -= 0.5;
 			vec3 ld = player.look_dir;
 			ld.z = 0;
 			ld = ld.normalized();
@@ -241,11 +338,12 @@ void Level::Update(float delta) {
 	if ((p_xypos - g_xypos).mag() < 0.3) {
 		if (!displayed_win) {
 			displayed_win = true;
-			ImGui::OpenPopup("WinScreen");
+			ImGui::OpenPopup("End");
 		}
 	}
-
-	if (ImGui::BeginPopup("WinScreen")) {
+	bool temp2 = true;
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	if (ImGui::BeginPopupModal("End", &temp2, ImGuiWindowFlags_AlwaysAutoResize)) {
 		ImGui::Text("You took too long :(");
 		ImGui::EndPopup();
 	}

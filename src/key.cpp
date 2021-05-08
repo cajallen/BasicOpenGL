@@ -59,7 +59,7 @@ Goal::Goal(vec3 pos, float rot_spd) : Entity(pos), rotation_speed(rot_spd) {
 void Key::Update(float delta) {
 	Entity::Update(delta);
 	rotation += delta * rotation_speed;
-	model = glm::translate(glm::mat4(1), (glm::vec3) position);
+	model = glm::translate(glm::mat4(1), (glm::vec3) (position + vec3(0,0,0.2)));
 	model = glm::rotate(model, rotation, glm::vec3(0.0f, 0.0f, 1.0f));
 	model = glm::rotate(model, PI / 2.f, glm::vec3(0.0f, 1.0f, 0.0f));
 }
@@ -68,15 +68,16 @@ void Door::Update(float delta) {
 	Entity::Update(delta);
 	model = glm::translate(glm::mat4(1), (glm::vec3) position);
 	float opened_amount = opened_at == 0.0 ? 0.0 : fclamp(0.5 * (lifetime - opened_at), 0, 1);
-	model = glm::translate(model, glm::vec3(0, 0, lerp(-0.25, 0.25, opened_amount)));
+	model = glm::translate(model, glm::vec3(0, 0, lerp(0.0, 0.5, opened_amount)));
 	model = glm::rotate(model, -PI/2, glm::vec3(0.f, 0.f, 1.f));
 }
 
 void Goal::Update(float delta) {
 	Entity::Update(delta);
 	rotation += delta * rotation_speed;
-	model = glm::translate(model, (glm::vec3) position);
-	model = glm::rotate(model, rotation, glm::vec3(1.f, 0.f, 0.f));
+	model = glm::translate(glm::mat4(1), (glm::vec3) position);
+	model = glm::rotate(model, PI/2, glm::vec3(1.f, 0.f, 0.f));
+	model = glm::rotate(model, rotation, glm::vec3(0.f, 0.f, 1.f));
 	model = glm::scale(model, glm::vec3(0.1, 0.1, 0.1));
 }
 

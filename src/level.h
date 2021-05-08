@@ -15,8 +15,7 @@ using namespace std;
 
 struct Level {
 	// up is defined as 0,0,1, so we typically ignore the third coordinate here
-	vector<vec3i> walls;
-	vector<vec3i> floors;
+	vector<vec3i> heightmap;
 	vector<Key*> keys;
 	vector<Door*> doors;
 	Goal* goal;
