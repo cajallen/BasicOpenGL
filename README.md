@@ -1,38 +1,16 @@
 ## Compiling
 I use Windows and VS. All dependencies are submodules in `src/lib`.   
 
-## Features
-Base - https://www.youtube.com/watch?v=CzVyH9fHihA  
-Extra Details - https://www.youtube.com/watch?v=GLfKier6Eo0  
- - Continuous Movement: The player can move continuously through the environment  
- - Walls & Doors: Each element type has a unique rendering.   
- - Keys: Each key is rendered as a physical object (e.g., a cube, teapot, or key model). Whenever a player moves the key must be rendered in front of them moving with the character.  
- - User Input: Users can  move smoothly around the map with mouse and keyboard input.   
- - Collision Detection: Users can not be able to move through walls or locked doors.  
- - Floors & Ceilings: Floors are rendered.  
- - Lighting: The scene has ambient, diffuse, and specular lighting.  
- - New Maps: New maps are easily creatable.  
 
-### Extra Credit
-#### Lighting & Materials:
-(5) Texture map the walls and floors (use different textures for different models)  
-(5) Bump map or normal map the walls and floors  
+## Progress Description & Overview
+#### Describe the overall goal of your project: What were you aiming to accomplish and how much of this goal you actually achieved?
+The main goal in a word I wanted to achieve was shadowmaps. Directional shadowmaps are the direct version of this, but I additionally wanted to add point light shadowmaps. After this, I wanted to implement more flexible level creation and mesh generation, which would lead into being able to update the map with the program open (without having to reload anything). The goal here was to do this without regenerating the entire level mesh, mostly for "I did this" reasons than practical ones. 
 
-#### User Interface
-(5) Integrated keyboard and mouse control  
-(5) Jumping  
-
-#### Dynamic Environment
-(5) Animate the process of doors opening after they are unlocked.  
-
-#### Environment
-(?) I modified existing 3d models (pretty extensively!), not sure if this counts, not that it matters.  
-(5) Load existing models in the OBJ format.  
-
-#### Miscellaneous
-(5) Make a video of yourself playing, showcasing your features  
-
-
-#### Struggles
-Getting Texture2DArray took approximately 24 hours to get working. I consider that a good bit of time, but I am happy that it is working. There's also just a lot of little things that take up hours. 
-OpenGL overall is easier to use than I anticipated, though. I enjoyed it.
+I achieved directional shadowmaps which were easily updatable in real time, and would track all objects. I achieved this by rendering a depth map from the directional light's perspective, and of course testing against this shadowmap in the fragment shader. This product was a success, it did exactly what I wanted to in the way that I expected to without compromises.
+#### What were they main obstacles you encountered along the way?
+## Connection to Our Class
+#### In what ways did your project demonstrate various aspects of computer graphics we have discussed in this class?
+## Key Features & Images
+#### Describe the various key features of your final working system. Show several images of your project working. Highlight the various features with different images. 
+## Future Work
+#### In what ways could your project be extended going forward? 
