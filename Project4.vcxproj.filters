@@ -66,25 +66,22 @@
     <ClCompile Include="src\lib\imgui\imgui_demo.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\log.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\player.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\level.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\lib\imgui\cpp\imgui_stdlib.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\key.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\lib\fmt\src\format.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\lib\fmt\src\os.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\log.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\grid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -419,9 +416,6 @@
     <ClInclude Include="src\main.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\level.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\log.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -441,9 +435,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\lib\obj_loader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\key.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\lib\fmt\include\fmt\chrono.h">
@@ -482,5 +473,11 @@
     <ClInclude Include="src\lib\fmt\include\fmt\ranges.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\grid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\lib\SDL\lib\x64\SDL2.dll" />
   </ItemGroup>
 </Project>

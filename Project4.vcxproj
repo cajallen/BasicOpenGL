@@ -19,8 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\key.cpp" />
-    <ClCompile Include="src\level.cpp" />
+    <ClCompile Include="src\grid.cpp" />
     <ClCompile Include="src\lib\fmt\src\format.cc" />
     <ClCompile Include="src\lib\fmt\src\os.cc" />
     <ClCompile Include="src\lib\glad\glad.c" />
@@ -40,9 +39,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\globals.h" />
+    <ClInclude Include="src\grid.h" />
     <ClInclude Include="src\imgui_ex.h" />
-    <ClInclude Include="src\key.h" />
-    <ClInclude Include="src\level.h" />
     <ClInclude Include="src\lib\fmt\include\fmt\chrono.h" />
     <ClInclude Include="src\lib\fmt\include\fmt\color.h" />
     <ClInclude Include="src\lib\fmt\include\fmt\compile.h" />
@@ -163,6 +161,9 @@
     <ClInclude Include="src\model_loader.h" />
     <ClInclude Include="src\player.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="src\lib\SDL\lib\x64\SDL2.dll" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{3A3402B4-EBD3-4F91-9198-D405EF754F85}</ProjectGuid>
@@ -218,14 +219,14 @@
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>src;src\lib;src\lib\imgui;src\lib\geom_lib;src\lib\ImGuizmo;src\lib\SDL\include;src\lib\stb;src\lib\imgui\backends;C:\Users\cajal\Documents\School\2021SPRING\Graphics\FinalProject\src\lib\fmt\include;$(IncludePath)</IncludePath>
+    <IncludePath>src;src\lib;src\lib\imgui;src\lib\geom_lib;src\lib\ImGuizmo;src\lib\SDL\include;src\lib\stb;src\lib\imgui\backends;src\lib\fmt\include;$(IncludePath)</IncludePath>
     <LibraryPath>src\lib\SDL\lib\x64;$(LibraryPath)</LibraryPath>
-    <SourcePath>C:\Users\cajal\Documents\School\2021SPRING\Graphics\Project4\src;$(SourcePath)</SourcePath>
+    <SourcePath>src;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>src;src\lib;src\lib\imgui;src\lib\geom_lib;src\lib\ImGuizmo;src\lib\SDL\include;src\lib\stb;src\lib\imgui\backends;C:\Users\cajal\Documents\School\2021SPRING\Graphics\FinalProject\src\lib\fmt\include;$(IncludePath)</IncludePath>
+    <IncludePath>src;src\lib;src\lib\imgui;src\lib\geom_lib;src\lib\ImGuizmo;src\lib\SDL\include;src\lib\stb;src\lib\imgui\backends;src\lib\fmt\include;$(IncludePath)</IncludePath>
     <LibraryPath>src\lib\SDL\lib\x64;$(LibraryPath)</LibraryPath>
-    <SourcePath>C:\Users\cajal\Documents\School\2021SPRING\Graphics\Project4\src;$(SourcePath)</SourcePath>
+    <SourcePath>src;$(SourcePath)</SourcePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -284,6 +285,7 @@
     <Link>
       <AdditionalDependencies>SDL2.lib;SDL2main.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>C:\Users\cajal\Documents\Development\BasicOpenGL\src\lib\SDL\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

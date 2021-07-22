@@ -17,15 +17,13 @@
 #include <stb_image.h>
 #include <sstream>
 #include <fstream>
-#include <fmt/format.h>
 
 #include "globals.h"
 #include "log.h"
-#include "level.h"
 #include "model_loader.h"
 #include "player.h"
-#include "key.h"
 #include "obj_loader.h"
+#include "grid.h"
 
 using namespace std;
 using namespace fmt;

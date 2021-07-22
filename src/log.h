@@ -11,7 +11,11 @@
 
 using namespace std;
 
+namespace caj {
+
 static inline vector<string> log_strings;
 
-void Log(string s);
-void ShowLog();
+void log(string s);
+void show_log();
+
+}  // namespace caj

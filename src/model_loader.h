@@ -21,7 +21,7 @@ inline vector<Vertex> LoadModelFromFile(string s, int layer) {
 		vertices.push_back(Vertex{v.Position, v.Normal, vec3(v.TextureCoordinate.X, v.TextureCoordinate.Y, z_coord)});
 	}
 	for (int i = 0; i + 2 < vertices.size(); i += 3) {
-		SetTriTangents(vertices[i], vertices[i + 1], vertices[i + 2]);
+		Vertex::set_tangents(vertices[i], vertices[i + 1], vertices[i + 2]);
 	}
 	return vertices;
 }

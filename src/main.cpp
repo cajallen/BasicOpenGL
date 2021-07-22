@@ -1,59 +1,104 @@
 #include "main.h"
 
-/*
-UNIFORM UPDATES
 
-// depth_rtt.vert
-uniform mat4 model; // once per object per frame : Done in Entity::UpdateUniforms
-uniform mat4 VP; // once per light direction change : Done in UpdateLightDir
+namespace caj {
 
-// main.vert
-uniform mat4 model; // once per frame per object : Done in Entity::UpdateUniforms
-uniform mat4 VP; // once per frame : Done in UPDATE_UNIFORMS in main
-uniform mat4 DepthBiasVP; // once per light direction change : Done in UpdateLightDir
-//main.frag
-uniform vec3 view_pos; // once per frame : Done in UPDATE_UNIFORMS in main
-uniform vec3 light_dir; // once per light direction change : Done in UpdateLightDir
-uniform sampler2DArray tex; // once : Done in GenVertexObjects
-uniform sampler2DShadow shadow_tex; // once : Done in GenVertexObjects
-uniform vec3 ambient_col; // once per frame per object : Done in Entity::UpdateUniforms
-uniform vec3 diffuse_col; // once per frame per object : Done in Entity::UpdateUniforms
-uniform vec3 specular_col; // once per frame per object : Done in Entity::UpdateUniforms
-uniform float phong; // once per frame per object : Done in Entity::UpdateUniforms
-*/
 bool fullscreen = false;
 float screen_width = 1900;
 float screen_height = 1000;
 SDL_Window* window;
 ImGuiIO* io;
-Level* level;
-DrawSet ds_main;
-DrawSet ds_models;
-DrawSet ds_shadows;
-ModelRange model_world;
-map<string, ModelRange> models;
 
 // not extern
 const char* glsl_version = "#version 330";
-
-float aspect;
 SDL_GLContext context;
+
 vec3 light_dir = vec3(-1,-1,-2).normalized();
+Player player;
 
-bool do_daylight_cycle;
-float daylight_time;
+void initialize_environment() {
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
+        IM_ASSERT("SDL_Init failed" && 0);
+
+    // Ask SDL to get a recent version of OpenGL (3.2 or greater)
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+
+    // Create a window (offsetx, offsety, width, height, flags)
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
+	window = SDL_CreateWindow("Basic OpenGL", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, screen_width, screen_height, window_flags);
+	player.window = window;
+
+    // Create a context to draw in
+    context = SDL_GL_CreateContext(window);
+    SDL_GL_MakeCurrent(window, context);
+
+    if (!gladLoadGLLoader(SDL_GL_GetProcAddress))
+        IM_ASSERT("gladLoadGLLoader failed" && 0);
+}
+
+void initialize_imgui() {
+	IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGui_ImplSDL2_InitForOpenGL(window, context);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+}
 
 
-struct {
-	GLuint model, vp, db_vp, view_pos, light_dir, amb, diff, spec, phong;
-} main_shader_loc;
+// vertex_member_flags should contain the index of the members
+// in Vertex that will be used in the shader. The shader should 
+// layout parallel to Vertex, even if that skips an index.
+void initialize_shader(Shader* shader, int vertex_member_flags) {
+	glUseProgram(shader->program);
+	glGenVertexArrays(1, &shader->vao);
+	glBindVertexArray(shader->vao);
 
-struct {
-	GLuint model, vp;
-} depth_shader_loc;
+	for (auto& [id, uni] : shader->uniforms) {
+		uni = glGetUniformLocation(shader->program, id.c_str());
+	}
+
+	for (int i = 0; i < sizeof(Vertex) / sizeof(vec3); i++) {
+		if (vertex_member_flags >> i | 0b1) {
+			glVertexAttribPointer(i, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(i * sizeof(vec3)));
+			glEnableVertexAttribArray(i);
+		}
+	}
+
+	shader->initialization(shader);
+}
+
+
+void initialize_depthmaps(GLuint* framebuffer, GLuint* depthmap_tex) {
+	glActiveTexture(GL_TEXTURE1);
+
+	glGenFramebuffers(1, framebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, *framebuffer);
+
+	glGenTextures(1, depthmap_tex);
+	glBindTexture(GL_TEXTURE_2D, *depthmap_tex); // TODO: this is permanently bound on texture unit 1 for now...
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 4096, 4096, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, *depthmap_tex, 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+
+	IM_ASSERT(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glActiveTexture(GL_TEXTURE0);
+}
+
 
 // This function is modified from opengl-tutorial.org
-GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path){
+GLuint load_program(const char* vertex_file_path, const char* fragment_file_path) {
 	// Create the shaders
 	GLuint vertex_id = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fragment_id = glCreateShader(GL_FRAGMENT_SHADER);
@@ -68,7 +113,7 @@ GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path
 		vertex_stream.close();
 	}
 	else {
-		Log(format("Failed to open {}\n", vertex_file_path));
+		log(format("Failed to open {}\n", vertex_file_path));
 	}
 
 	// Read the Fragment Shader code from the file
@@ -93,7 +138,7 @@ GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path
 	if (err_length > 0) {
 		vector<char> vert_err(err_length+1);
 		glGetShaderInfoLog(vertex_id, err_length, NULL, &vert_err[0]);
-		Log(format("{}\n", &vert_err[0]));
+		log(format("{}\n", &vert_err[0]));
 	}
 	// Compile Fragment Shader
 	char const * fragment_source_ptr = fragment_source.c_str();
@@ -105,7 +150,7 @@ GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path
 	if (err_length > 0) {
 		vector<char> frag_err(err_length+1);
 		glGetShaderInfoLog(fragment_id, err_length, NULL, &frag_err[0]);
-		Log(format("{}\n", &frag_err[0]));
+		log(format("{}\n", &frag_err[0]));
 	}
 	// Link the program
 	GLuint program_id = glCreateProgram();
@@ -118,7 +163,7 @@ GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path
 	if (err_length > 0) {
 		vector<char> shader_err(err_length+1);
 		glGetProgramInfoLog(program_id, err_length, NULL, &shader_err[0]);
-		Log(format("{}\n", &shader_err[0]));
+		log(format("{}\n", &shader_err[0]));
 	}
 
 	glDetachShader(program_id, vertex_id);
@@ -130,7 +175,7 @@ GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path
 	return program_id;
 }
 
-bool LoadAtlasFromFiles(vector<string> file_names, GLuint* out_texture) {
+bool load_atlas(vector<string> file_names, GLuint* out_texture) {
 	struct TempImage {
 		string file_name;
 		int wid, hei;
@@ -138,7 +183,7 @@ bool LoadAtlasFromFiles(vector<string> file_names, GLuint* out_texture) {
 
 		TempImage(string fn) : file_name(fn) {
             data = stbi_load(fn.c_str(), &wid, &hei, NULL, 4);
-			if (data == NULL) { Log(fn + " failed to load"); }
+			if (data == NULL) { log(fn + " failed to load"); }
 		}
 	};
 	vector<TempImage> images;
@@ -153,10 +198,12 @@ bool LoadAtlasFromFiles(vector<string> file_names, GLuint* out_texture) {
 
     glGenTextures(1, &image_texture);
     glBindTexture(GL_TEXTURE_2D_ARRAY, image_texture);
+	// resize the texture
 	glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, size, size, file_names.size(), 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
+	// load in the individual layers
     int current_z = 0;
     for (TempImage& img : images) {
         glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, current_z, img.wid, img.hei, 1, GL_RGBA, GL_UNSIGNED_BYTE, img.data);
@@ -176,143 +223,104 @@ bool LoadAtlasFromFiles(vector<string> file_names, GLuint* out_texture) {
     return true;
 }
 
-void GenDefaultVertexObjects(GLuint* vao, GLuint* vbo, GLuint shader) {
-	glUseProgram(shader);
 
-    glGenVertexArrays(1, vao);
-    glBindVertexArray(*vao);
-    glGenBuffers(1, vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+bool draw_light_dir_widget() {
+	float yaw = light_dir.yaw();
+	float pitch = light_dir.pitch();
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(0 * sizeof(vec3)));
-    glEnableVertexAttribArray(0);
+	bool changed = false;
 
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(1 * sizeof(vec3)));
-    glEnableVertexAttribArray(1);
+	if (ImGui::TreeNode("Light")) {
+		yaw *= RAD2DEG;
+		pitch *= RAD2DEG;
+		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvailWidth() / 2.0 - ImGui::CalcTextSize("Yaw").x);
+		changed |= ImGui::DragFloat("Yaw##Light", &yaw, 0.2);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
+		changed |= ImGui::DragFloat("Pitch##Light", &pitch, 0.2, -175, -5);
 
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_TRUE, sizeof(Vertex), (void*)(2 * sizeof(vec3)));
-    glEnableVertexAttribArray(2);
+		yaw *= DEG2RAD;
+		pitch *= DEG2RAD;
 
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_TRUE, sizeof(Vertex), (void*)(3 * sizeof(vec3)));
-    glEnableVertexAttribArray(3);
-	
-	glBindVertexArray(0);
-
-	GLuint tex_loc = glGetUniformLocation(shader, "tex");
-	GLuint shadow_tex_loc = glGetUniformLocation(shader, "shadow_tex");
-	main_shader_loc.model = glGetUniformLocation(shader, "model");
-	main_shader_loc.vp = glGetUniformLocation(shader, "VP");
-	main_shader_loc.db_vp = glGetUniformLocation(shader, "DepthBiasVP");
-	main_shader_loc.view_pos = glGetUniformLocation(shader, "view_pos");
-	main_shader_loc.light_dir = glGetUniformLocation(shader, "light_dir");
-	main_shader_loc.amb = glGetUniformLocation(shader, "ambient_col");
-	main_shader_loc.diff = glGetUniformLocation(shader, "diffuse_col");
-	main_shader_loc.spec = glGetUniformLocation(shader, "specular_col");
-	main_shader_loc.phong = glGetUniformLocation(shader, "phong");
-
-    glUniform1i(tex_loc, 0);
-	glUniform1i(shadow_tex_loc, 1);
-}
-
-void GenShadowsVertexObjects(GLuint* vao, GLuint* vbo, GLuint shader) {
-	glUseProgram(shader);
-    glGenVertexArrays(1, vao);
-    glBindVertexArray(*vao);
-    //glGenBuffers(1, vbo);
-    //glBindBuffer(GL_ARRAY_BUFFER, *vbo);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-    glEnableVertexAttribArray(0);
-
-	glBindVertexArray(0);
-
-	depth_shader_loc.model = glGetUniformLocation(shader, "model");
-	depth_shader_loc.vp = glGetUniformLocation(shader, "VP");
-}
-
-vector<Vertex> LoadLevelFromFile(string file_name) {
-	delete level;
-	level = LoadLevel(file_name);
-	if (level->heightmap.size() == 0) {
-		Log(file_name + " is invalid level");
-        return {};
+		ImGui::TreePop();
 	}
-	
-	vector<Vertex> wall_data = level->GenerateWalls();
-	vector<Vertex> floor_data = level->GenerateFloors();
-    vector<Vertex> geometry_data;
-    geometry_data.reserve(wall_data.size() + floor_data.size());
-    geometry_data.insert(geometry_data.end(), wall_data.begin(), wall_data.end());
-    geometry_data.insert(geometry_data.end(), floor_data.begin(), floor_data.end());
 
-    return geometry_data;
+	light_dir = YawPitch(yaw, pitch);
+	return changed;
 }
 
-int InitializeEnv() {
-	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
-        IM_ASSERT("SDL_Init failed" && 0);
+void draw_object(Shader shader, ModelRange mr) {
+    glUseProgram(shader.program);
+	glBindVertexArray(shader.vao);
 
-    // Ask SDL to get a recent version of OpenGL (3.2 or greater)
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-
-    // Create a window (offsetx, offsety, width, height, flags)
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE);
-	window = SDL_CreateWindow("Basic OpenGL", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, screen_width, screen_height, window_flags);
-    aspect = screen_width / (float)screen_height;
-
-    // Create a context to draw in
-    context = SDL_GL_CreateContext(window);
-    SDL_GL_MakeCurrent(window, context);
-
-    if (!gladLoadGLLoader(SDL_GL_GetProcAddress))
-        IM_ASSERT("gladLoadGLLoader failed" && 0);
-	
-	return 0;
+	shader.pre_object_render(&shader);
+	shader.pre_render(&shader);
+	// glDraw uses the vertex buffer that was bound when we enabled the attrib arrays...
+	glDrawArrays(GL_TRIANGLES, mr.start_pos, mr.size);
+	glBindVertexArray(0);
 }
 
-void InitializeImGui() {
-	IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-    ImGui_ImplSDL2_InitForOpenGL(window, context);
-    ImGui_ImplOpenGL3_Init(glsl_version);
+GLuint create_atlas(vector<string> file_names) {
+	glActiveTexture(GL_TEXTURE0);
+	GLuint tex_id;
+	load_atlas(file_names, &tex_id);
+	return tex_id;
 }
 
-void DrawWorld(DrawSet ds) {
-    glUseProgram(ds.shader);
-	glBindVertexArray(ds.vao);
 
+bool handle_input() {
+	SDL_Event windowEvent;
+	while (SDL_PollEvent(&windowEvent)) {
+		ImGui_ImplSDL2_ProcessEvent(&windowEvent);
+		player.handle_input(&windowEvent);
+		if (windowEvent.type == SDL_QUIT)
+			return true;
+		if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_ESCAPE)
+			return true;
+		if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_f)
+			fullscreen = !fullscreen;
+		if (windowEvent.type == SDL_WINDOWEVENT_RESIZED) {
+			screen_width = windowEvent.window.data1;
+			screen_height = windowEvent.window.data2;
+		}
+		SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
+	}
+	return false;
+}
+
+namespace impl {
+
+
+void main_initialization(Shader* shader) {
+	glUniform1i(shader->uniforms["tex"], 0); // texture unit 0
+	glUniform1i(shader->uniforms["heightmap_tex"], 0); // texture unit 0
+	glUniform1i(shader->uniforms["depthmap_tex"], 1); // texture unit 1
+}
+
+void main_pre_object_render(Shader* shader) {
 	vec3 ones(1,1,1);
 	glm::mat4 one(1);
 
-	GLuint amb_loc = glGetUniformLocation(ds.shader, "ambient_col");
-	if (amb_loc != -1)
-		glUniform3fv(amb_loc, 1, &ones.x);
+	if (shader->uniforms.count("ambient_col") == 1)
+		glUniform3fv(shader->uniforms["ambient_col"], 1, &ones.x);
 	
-	GLuint dif_loc = glGetUniformLocation(ds.shader, "diffuse_col");
-	if (dif_loc != -1)
-		glUniform3fv(dif_loc, 1, &ones.x);
+	if (shader->uniforms.count("specular_col") == 1)
+		glUniform3fv(shader->uniforms["specular_col"], 1, &ones.x);
+	
+	if (shader->uniforms.count("diffuse_col") == 1)
+		glUniform3fv(shader->uniforms["diffuse_col"], 1, &ones.x);
 
-	GLuint spc_loc = glGetUniformLocation(ds.shader, "specular_col");
-	if (spc_loc != -1)
-		glUniform3fv(spc_loc, 1, &ones.x);
+	if (shader->uniforms.count("phong") == 1)
+		glUniform1f(shader->uniforms["phong"], 10.0);
 
-	GLuint phong_loc = glGetUniformLocation(ds.shader, "phong");
-	if (phong_loc != -1)
-		glUniform1f(phong_loc, 10.0);
-
-	GLuint model_loc = glGetUniformLocation(ds.shader, "model");
-	if (model_loc != -1)
-		glUniformMatrix4fv(model_loc, 1, GL_FALSE, glm::value_ptr(one));
-
-	//glBindBuffer(GL_ARRAY_BUFFER, ds_main.vbo);
-	glDrawArrays(GL_TRIANGLES, model_world.start_pos, model_world.size);
-	glBindVertexArray(0);
+	if (shader->uniforms.count("model") == 1)
+		glUniformMatrix4fv(shader->uniforms["model"], 1, GL_FALSE, glm::value_ptr(one));
 }
 
-void UpdateLightDir() {
+
+void main_pre_render(Shader* shader) {
+	// We could optimize this slightly by moving these lighting components out 
+	// to only update when the lighting is changed. 
 	glm::vec3 light_inv_dir = glm::vec3(-light_dir.x, -light_dir.y, -light_dir.z);
 	glm::mat4 depth_proj = glm::ortho(-12.f, 12.f, -12.f, 12.f, -8.f, 8.f);
 	glm::mat4 depth_view = glm::lookAt(light_inv_dir, glm::vec3(0,0,0), glm::vec3(0,1,0));
@@ -326,242 +334,177 @@ void UpdateLightDir() {
 	);
 	glm::mat4 depth_bias_vp = bias * depth_vp;
 
-	glUseProgram(ds_shadows.shader);
-	glUniformMatrix4fv(depth_shader_loc.vp, 1, GL_FALSE, glm::value_ptr(depth_vp));
+	glUniform3fv(shader->uniforms["light_dir"], 1, &light_dir.x);
+	glUniformMatrix4fv(shader->uniforms["db_vp"], 1, GL_FALSE, glm::value_ptr(depth_bias_vp));
 
-	glUseProgram(ds_main.shader);
-	glUniform3fv(main_shader_loc.light_dir, 1, &light_dir.x);
-	glUniformMatrix4fv(main_shader_loc.db_vp, 1, GL_FALSE, glm::value_ptr(depth_bias_vp));
+	glm::mat4 view = player.get_view_matrix();
+	glm::mat4 proj = glm::perspective(3.1416f / 3, screen_width/screen_height, 0.1f, 100.0f);
+	glm::mat4 vp = proj*view;
+
+	glUniformMatrix4fv(shader->uniforms["vp"], 1, GL_FALSE, glm::value_ptr(vp));
+	glUniform3fv(shader->uniforms["view_pos"], 1, &player.camera_pos.x);
+
 }
 
-bool DrawLightDirWidget() {
-	float yaw = light_dir.yaw();
-	float pitch = light_dir.pitch();
 
-	bool changed = false;
+void depthmap_initialization(Shader* shader) {
 
-	if (ImGui::TreeNode("Light")) {
-		ImGui::Checkbox("Automate Daylight", &do_daylight_cycle);
-		yaw *= RAD2DEG;
-		pitch *= RAD2DEG;
-		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvailWidth() / 2.0 - ImGui::CalcTextSize("Yaw").x);
-		changed |= ImGui::DragFloat("Yaw##Light", &yaw, 0.2);
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
-		changed |= ImGui::DragFloat("Pitch##Light", &pitch, 0.2, -175, -5);
-		
-		if (changed)
-			do_daylight_cycle = false;
-
-		yaw *= DEG2RAD;
-		pitch *= DEG2RAD;
-
-		ImGui::TreePop();
-	}
-
-	if (!changed && do_daylight_cycle) {
-		yaw = 0.5 * daylight_time;
-		pitch = -4 * PI / 6 + (PI / 6) * cos(0.5 * daylight_time);
-	}
-
-	light_dir = YawPitch(yaw, pitch);
-	return changed || do_daylight_cycle;
 }
 
-void DrawMenus() {
-	//ImGui::ShowDemoWindow();
-	ImGui::Begin("Log");
+
+void depthmap_pre_object_render(Shader* shader) {
+	glm::mat4 one(1);
+
+	if (shader->uniforms.count("model") == 1)
+		glUniformMatrix4fv(shader->uniforms["model"], 1, GL_FALSE, glm::value_ptr(one));
+}
+
+
+void depthmap_pre_render(Shader* shader) {
+	glm::vec3 light_inv_dir = glm::vec3(-light_dir.x, -light_dir.y, -light_dir.z);
+	glm::mat4 depth_proj = glm::ortho(-12.f, 12.f, -12.f, 12.f, -8.f, 8.f);
+	glm::mat4 depth_view = glm::lookAt(light_inv_dir, glm::vec3(0,0,0), glm::vec3(0,1,0));
+	glm::mat4 depth_vp = depth_proj * depth_view;
+
+	glUniformMatrix4fv(shader->uniforms["vp"], 1, GL_FALSE, glm::value_ptr(depth_vp));
+}
+
+void initialize_shaders(Shader* main_shader, Shader* depthmap_shader) {
+	GLuint main_program = caj::load_program("src/shader/main.vert", "src/shader/main.frag");
+	*main_shader = Shader{ main_program, 0,
+		{{"tex", -1}, {"depthmap_tex", -1}, {"model", -1},
+		{"vp", -1}, {"db_vp", -1}, {"view_pos", -1},
+		{"light_dir", -1}, {"ambient_col", -1}, {"diffuse_col", -1},
+		{"specular_col", -1}, {"phong", -1}, {"heightmap_tex", -1}},
+		&main_initialization,
+		&main_pre_render,
+		&main_pre_object_render
+	};
+	GLuint depthmap_program = caj::load_program("src/shader/depth_rtt.vert", "src/shader/depth_rtt.frag");
+	*depthmap_shader = Shader{depthmap_program, 0,
+		{{"model", -1}, {"vp", -1}},
+		&depthmap_initialization,
+		&depthmap_pre_render,
+		&depthmap_pre_object_render
+	};
+	caj::initialize_shader(main_shader, 0b1111);
+	caj::initialize_shader(depthmap_shader, 0b0001);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+void initialize_geometry(GLuint vbo, ModelRange* model_range) {
+	vector<Vertex> model_data = caj::generate_grid(255);
+	model_range->start_pos = 0;
+	model_range->size = model_data.size();
+
+	glBufferData(GL_ARRAY_BUFFER, model_data.size() * sizeof(Vertex), model_data.data(), GL_STATIC_DRAW);
+}
+
+void draw_menus(GLuint depth_tex) {
+	show_log();
+
+	ImGui::Begin("ShadowMap");
 	{
-		static string level_string = "assets/scenes/set3.txt";
-		ImGui::Text("Level", &level_string);
-		ImGui::SameLine();
-		if (ImGui::SmallButton("Restart")) {
-			vector<Vertex> geometry_data = LoadLevelFromFile(level_string);
-		}
-
-
-		if (DrawLightDirWidget()) {
-			UpdateLightDir();
-		}
-		for (Key* key : level->keys) {
-			string input_string = "Key " + string(KEY_COLOR_STR[key->color]) + " Pos";
-			ImGui::DragFloat3(input_string.c_str(), &key->position.x, 0.1);
-		};
-		for (Door* door : level->doors) {
-			string input_string = "Door " + string(KEY_COLOR_STR[door->color]) + " Pos";
-			ImGui::DragFloat3(input_string.c_str(), &door->position.x, 0.1);
-		};
+		ImTextureID imgui_shadowmap_id = ImTextureID(GLuint(depth_tex));
+		{
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+			ImVec2 size = ImGui::GetContentRegionAvail();
+            ImVec2 uv_min = ImVec2(0.0f, 0.0f);                 // Top-left
+            ImVec2 uv_max = ImVec2(1.0f, 1.0f);                 // Lower-right
+            ImVec4 tint_col = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);   // No tint
+            ImVec4 border_col = ImVec4(1.0f, 1.0f, 1.0f, 0.5f); // 50% opaque white
+            ImGui::Image(imgui_shadowmap_id, size, uv_min, uv_max, tint_col, border_col);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                float region_sz = 32.0f;
+                float region_x = ImGui::GetIO().MousePos.x - pos.x - region_sz * 0.5f;
+                float region_y = ImGui::GetIO().MousePos.y - pos.y - region_sz * 0.5f;
+                float zoom = 4.0f;
+                if (region_x < 0.0f) { region_x = 0.0f; }
+                else if (region_x > size.x - region_sz) { region_x = size.x - region_sz; }
+                if (region_y < 0.0f) { region_y = 0.0f; }
+                else if (region_y > size.y - region_sz) { region_y = size.y - region_sz; }
+                ImGui::Text("Min: (%.2f, %.2f)", region_x, region_y);
+                ImGui::Text("Max: (%.2f, %.2f)", region_x + region_sz, region_y + region_sz);
+                ImVec2 uv0 = ImVec2((region_x) / size.x, (region_y) / size.y);
+                ImVec2 uv1 = ImVec2((region_x + region_sz) / size.x, (region_y + region_sz) / size.y);
+                ImGui::Image(imgui_shadowmap_id, ImVec2(region_sz * zoom, region_sz * zoom), uv0, uv1, tint_col, border_col);
+                ImGui::EndTooltip();
+            }
+        }
 	}
-
 	ImGui::End();
-	ShowLog();
 }
 
-bool HandleInput() {
-	SDL_Event windowEvent;
-	while (SDL_PollEvent(&windowEvent)) {
-		ImGui_ImplSDL2_ProcessEvent(&windowEvent);
-		level->player.HandleInput(&windowEvent);
-		if (windowEvent.type == SDL_QUIT)
-			return true;
-		if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_ESCAPE)
-			return true;
-		if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_f)
-			fullscreen = !fullscreen;
-		if (windowEvent.type == SDL_WINDOWEVENT_RESIZED) {
-			screen_width = windowEvent.window.data1;
-			screen_height = windowEvent.window.data2;
-			aspect = screen_width / (float)screen_height;
-		}
-		SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
-	}
-	return false;
-}
-int main(int argc, char* argv[]) {
-    InitializeEnv();
 
-	glActiveTexture(GL_TEXTURE0);
-	GLuint tex_id;
-	LoadAtlasFromFiles({
-		"assets/floor.png", "assets/floor_specular.png", "assets/floor_normal.png",
-		"assets/wall_top.png", "assets/wall_top_specular.png", "assets/wall_top_normal.png", 
-		"assets/noise_diffuse.png", "assets/noise_specular.png", "assets/noise.png"}, &tex_id
-	);
-	// END TEXTURE0
-
-	ds_main.shader = LoadShaders("src/shader/main.vert", "src/shader/main.frag");
-	ds_shadows.shader = LoadShaders("src/shader/depth_rtt.vert", "src/shader/depth_rtt.frag");
-	
-    // initialize world geometry
-	GenDefaultVertexObjects(&ds_main.vao, &ds_main.vbo, ds_main.shader);
-	GenShadowsVertexObjects(&ds_shadows.vao, &ds_shadows.vbo, ds_shadows.shader);
-
-	vector<Vertex> geometry_data = LoadLevelFromFile("assets/scenes/set3.txt");
-	model_world.start_pos = 0;
-    model_world.size = geometry_data.size();
-
-	// TODO: Start buffering data before all of the models are read.
-
-	vector<Vertex> model_data;
-	for (string model_name : { "key", "door", "goal" }) {
-		model_data = LoadModelFromFile("assets/models/" + model_name + ".obj", 6);
-		ModelRange range;
-		range.start_pos = geometry_data.size();
-		geometry_data.insert(geometry_data.end(), model_data.begin(), model_data.end());
-		range.size = geometry_data.size() - range.start_pos;
-		models.insert({ model_name, range });
-	}
-
-	glBindBuffer(GL_ARRAY_BUFFER, ds_main.vbo);
-	glBufferData(GL_ARRAY_BUFFER, geometry_data.size() * sizeof(Vertex), geometry_data.data(), GL_STATIC_DRAW);
-
-	glActiveTexture(GL_TEXTURE1);
-
-	GLuint framebuffer;
-	glGenFramebuffers(1, &framebuffer);
+void draw_depthmaps(GLuint framebuffer, Shader shader, ModelRange model_range) {
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	glViewport(0, 0, 4096, 4096);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	GLuint depth_tex;
-	glGenTextures(1, &depth_tex);
-	glBindTexture(GL_TEXTURE_2D, depth_tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, 4096, 4096, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+	draw_object(shader, model_range);
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_tex, 0);
-	glDrawBuffer(GL_NONE);
-	glReadBuffer(GL_NONE);
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		return false;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
 
-	UpdateLightDir();
-	
-	glEnable(GL_DEPTH_TEST);
-	// glEnable(GL_BLEND);
-	
+void draw_main(Shader shader, ModelRange model_range) {
+	glViewport(0,0, screen_width, screen_height);
+	glClearColor(0.4f, 0.5f, 0.6f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	InitializeImGui();
+	draw_object(shader, model_range);
+}
 
-    io = &ImGui::GetIO();
-	float last_frame = 0.0;
-	float this_frame = 0.0;
+
+}  // namespace impl
+}  // namespace caj
+
+
+int main(int argc, char* argv[]) {
+	Shader main_shader, depthmap_shader;
+	GLuint framebuffer, depthmap_tex, atlas_tex, vbo;
+	ModelRange geometry;
+
+	caj::initialize_environment();
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	// fill buffer
+	caj::impl::initialize_geometry(vbo, &geometry);
+	// set up attributes
+	caj::impl::initialize_shaders(&main_shader, &depthmap_shader);
+	atlas_tex = caj::create_atlas({
+		"assets/floor.png", "assets/floor_specular.png", "assets/floor_normal.png", "assets/floor_height.png"
+	});
+	caj::initialize_depthmaps(&framebuffer, &depthmap_tex);
+	caj::initialize_imgui();
+
+	static int last_ticks = SDL_GetTicks();
+
     bool quit = false;
     while (!quit) {
-		quit = HandleInput();
-
-		this_frame = SDL_GetTicks() / 1000.f;
-		float delta = this_frame - last_frame;
-		last_frame = SDL_GetTicks() / 1000.f; // get last frame after we are done with logic, not rendering
+		quit = caj::handle_input();
+		if (quit) break;
 
 		ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame(window);
-        ImGui::NewFrame();
+		ImGui_ImplSDL2_NewFrame(caj::window);
+		ImGui::NewFrame();
 
-		level->Update(delta);
-		daylight_time += delta;
-		
-		DrawMenus();
+		// logic update
+		caj::player.update((SDL_GetTicks() - last_ticks)/1000.0);
+		last_ticks = SDL_GetTicks();
 
-		// START DRAW SHADOWMAP
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-		glViewport(0, 0, 4096, 4096);
+		caj::impl::draw_menus(depthmap_tex);
 
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		// update depth_mvp if light direction changes
-		DrawWorld(ds_shadows);
-		level->Draw(ds_shadows);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		// END DRAW SHADOWMAP
-	
+		caj::impl::draw_depthmaps(framebuffer, depthmap_shader, geometry);
+		caj::impl::draw_main(main_shader, geometry);
+		// TODO: how do we determine which objects to render 
+
 		ImGui::Render();
-		
-		// START DRAW MAIN
-		glViewport(0,0, screen_width, screen_height);
-
-		glClearColor(0.4f, 0.5f, 0.6f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		// UPDATE UNIFORMS
-		glUseProgram(ds_main.shader);
-		glm::mat4 view = level->player.GetViewMatrix();
-		glm::mat4 proj = glm::perspective(3.1416f / 3, aspect, 0.1f, 100.0f);
-		glm::mat4 vp = proj*view;
-
-		glUniformMatrix4fv(main_shader_loc.vp, 1, GL_FALSE, glm::value_ptr(vp));
-		glUniform3fv(main_shader_loc.view_pos, 1, &level->player.camera_pos.x);
-		// UPDATE UNIFORMS
-
-		DrawWorld(ds_main);
-		level->Draw(ds_main);
-		// END DRAW MAIN
-
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        SDL_GL_SwapWindow(window);  // Double buffering
-
-/*		UpdateShaderCameraUniforms(ds_main);
-		UpdateShaderCameraUniforms(ds_models);
-
-		DrawWorld(ds_main.shader);
-        level->Draw(ds_models.shader);
-*/
-    }
-
-    // Clean Up
-    glDeleteProgram(ds_main.shader);
-	glDeleteProgram(ds_models.shader);
-
-    glDeleteBuffers(1, &ds_main.vbo);
-    glDeleteVertexArrays(1, &ds_main.vao);
-	glDeleteBuffers(1, &ds_models.vbo);
-    glDeleteVertexArrays(1, &ds_models.vao);
-
-    SDL_GL_DeleteContext(context);
-    SDL_Quit();
+		SDL_GL_SwapWindow(caj::window);
+	}
+	SDL_Quit();
     return 0;
 }

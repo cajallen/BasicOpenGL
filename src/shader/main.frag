@@ -14,7 +14,7 @@ in VS_OUT {
 layout(location = 0) out vec4 outColor;
 
 uniform sampler2DArray tex; // once
-uniform sampler2DShadow shadow_tex; // once
+uniform sampler2DShadow depthmap_tex; // once
 uniform vec3 ambient_col; // once per frame per object
 uniform vec3 diffuse_col; // once per frame per object
 uniform vec3 specular_col; // once per frame per object
@@ -44,7 +44,7 @@ vec4 calc_lighting_cont(vec3 diff_in, vec3 spec_in, vec3 norm) {
 	float visibility = 1.0;
 	if (diff_comp > 0) {
 		for (int i =0; i < 4; i++) {
-			visibility -= 0.25*(1.0-texture(shadow_tex, vec3(fs_in.shadowcoord.xy + poissonDisk[i]/4500.0,  (fs_in.shadowcoord.z-bias)/fs_in.shadowcoord.w)));
+			visibility -= 0.25*(1.0-texture(depthmap_tex, vec3(fs_in.shadowcoord.xy + poissonDisk[i]/4500.0,  (fs_in.shadowcoord.z-bias)/fs_in.shadowcoord.w)));
 		}
 	}
     return vec4(ambient, 1.0) + visibility * vec4(diffuse + specular, 1.0);
