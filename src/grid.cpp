@@ -5,7 +5,6 @@ namespace caj {
 vector<Vertex> generate_grid(int divisions) {
     float z_coord = 0.0;
     float cell_width = 1.0 / divisions;
-    caj::log(format("{}", cell_width));
     vector<Vertex> vertices;
     vertices.reserve(pow(divisions + 1, 2) * 6);
     for (float y = 0.0; y < divisions; y += 1.0) {

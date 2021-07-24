@@ -1,5 +1,8 @@
 #include "main.h"
 
+#define BASE_TEXUNIT GL_TEXTURE0
+#define DEPTHMAP_TEXUNIT GL_TEXTURE1
+#define SKYBOX_TEXUNIT GL_TEXTURE2
 
 namespace caj {
 
@@ -13,8 +16,13 @@ ImGuiIO* io;
 const char* glsl_version = "#version 330";
 SDL_GLContext context;
 
-vec3 light_dir = vec3(-1,-1,-2).normalized();
+vec3 light_dir = vec3(1,1,-2).normalized();
 Player player;
+
+vec3 amb_col = vec3(0.3,0.3,0.3);
+vec3 diff_col = vec3(1.0,1.0,1.0);
+vec3 spec_col = vec3(0.5,0.5,0.5);
+
 
 void initialize_environment() {
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
@@ -36,6 +44,8 @@ void initialize_environment() {
 
     if (!gladLoadGLLoader(SDL_GL_GetProcAddress))
         IM_ASSERT("gladLoadGLLoader failed" && 0);
+	
+	glEnable(GL_DEPTH_TEST);
 }
 
 void initialize_imgui() {
@@ -47,16 +57,21 @@ void initialize_imgui() {
 }
 
 
+void initialize_buffer(GLuint* vbo) {
+	glGenBuffers(1, vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+}
+
 // vertex_member_flags should contain the index of the members
 // in Vertex that will be used in the shader. The shader should 
 // layout parallel to Vertex, even if that skips an index.
-void initialize_shader(Shader* shader, int vertex_member_flags) {
-	glUseProgram(shader->program);
-	glGenVertexArrays(1, &shader->vao);
-	glBindVertexArray(shader->vao);
+void initialize_shader(Shader& shader, int vertex_member_flags) {
+	glUseProgram(shader.program);
+	glGenVertexArrays(1, &shader.vao);
+	glBindVertexArray(shader.vao);
 
-	for (auto& [id, uni] : shader->uniforms) {
-		uni = glGetUniformLocation(shader->program, id.c_str());
+	for (auto& [id, uni] : shader.uniforms) {
+		uni = glGetUniformLocation(shader.program, id.c_str());
 	}
 
 	for (int i = 0; i < sizeof(Vertex) / sizeof(vec3); i++) {
@@ -66,12 +81,12 @@ void initialize_shader(Shader* shader, int vertex_member_flags) {
 		}
 	}
 
-	shader->initialization(shader);
+	shader.initialization(shader);
 }
 
 
 void initialize_depthmaps(GLuint* framebuffer, GLuint* depthmap_tex) {
-	glActiveTexture(GL_TEXTURE1);
+	glActiveTexture(DEPTHMAP_TEXUNIT);
 
 	glGenFramebuffers(1, framebuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, *framebuffer);
@@ -93,7 +108,6 @@ void initialize_depthmaps(GLuint* framebuffer, GLuint* depthmap_tex) {
 	IM_ASSERT(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glActiveTexture(GL_TEXTURE0);
 }
 
 
@@ -224,48 +238,53 @@ bool load_atlas(vector<string> file_names, GLuint* out_texture) {
 }
 
 
-bool draw_light_dir_widget() {
-	float yaw = light_dir.yaw();
-	float pitch = light_dir.pitch();
+void load_cubemap(string folder, GLuint* tex_id) {
+	struct TempImage {
+		string file_name;
+		int wid, hei;
+		unsigned char* data;
 
-	bool changed = false;
+		TempImage(string fn) : file_name(fn) {
+            data = stbi_load(fn.c_str(), &wid, &hei, NULL, 4);
+			if (data == NULL) { log(fn + " failed to load"); }
+		}
+	};
 
-	if (ImGui::TreeNode("Light")) {
-		yaw *= RAD2DEG;
-		pitch *= RAD2DEG;
-		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvailWidth() / 2.0 - ImGui::CalcTextSize("Yaw").x);
-		changed |= ImGui::DragFloat("Yaw##Light", &yaw, 0.2);
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
-		changed |= ImGui::DragFloat("Pitch##Light", &pitch, 0.2, -175, -5);
+	glGenTextures(1, tex_id);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, *tex_id);
 
-		yaw *= DEG2RAD;
-		pitch *= DEG2RAD;
-
-		ImGui::TreePop();
+	vector<string> directions{"right", "left", "up", "down", "forward", "back"};
+	for (int i = 0; i < directions.size(); i++) {
+		TempImage temp(folder + "/" + directions[i] + ".png");
+		if (temp.data) {
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, 1024, 1024, 0, GL_RGBA, GL_UNSIGNED_BYTE, temp.data);
+			stbi_image_free(temp.data);
+		}
 	}
 
-	light_dir = YawPitch(yaw, pitch);
-	return changed;
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 }
 
-void draw_object(Shader shader, ModelRange mr) {
-    glUseProgram(shader.program);
-	glBindVertexArray(shader.vao);
-
-	shader.pre_object_render(&shader);
-	shader.pre_render(&shader);
-	// glDraw uses the vertex buffer that was bound when we enabled the attrib arrays...
-	glDrawArrays(GL_TRIANGLES, mr.start_pos, mr.size);
-	glBindVertexArray(0);
-}
 
 GLuint create_atlas(vector<string> file_names) {
-	glActiveTexture(GL_TEXTURE0);
+	glActiveTexture(BASE_TEXUNIT);
 	GLuint tex_id;
 	load_atlas(file_names, &tex_id);
 	return tex_id;
 }
+
+
+GLuint create_skybox(string folder) {
+	glActiveTexture(SKYBOX_TEXUNIT);
+	GLuint tex_id;
+	load_cubemap(folder, &tex_id);
+	return tex_id;
+}
+
 
 
 bool handle_input() {
@@ -288,37 +307,44 @@ bool handle_input() {
 	return false;
 }
 
+void draw_range(ModelRange& model_range) {
+	glDrawArrays(GL_TRIANGLES, model_range.start_pos, model_range.size);
+}
+
+void draw_meshes(Shader& shader, vector<Mesh>& meshes) {
+    glUseProgram(shader.program);
+	glBindVertexArray(shader.vao);
+
+	shader.pre_render(shader);
+	for (Mesh& mesh : meshes) {
+		shader.pre_mesh_render(shader, mesh);
+		draw_range(mesh.model_range);
+	}
+}
+
+
+
+void use_material(Shader& shader, Material& mat) {
+	glUniform3fv(shader.uniforms["ambient_col"], 1, &mat.ambient_color.x);
+	glUniform3fv(shader.uniforms["specular_col"], 1, &mat.specular_color.x);
+	glUniform3fv(shader.uniforms["diffuse_col"], 1, &mat.diffuse_color.x);
+	glUniform1f(shader.uniforms["phong"], mat.phong);
+	glUniform1f(shader.uniforms["zcoord"], mat.layer_offset * 4.0);
+
+	glActiveTexture(BASE_TEXUNIT);
+	glBindTexture(GL_TEXTURE_2D_ARRAY, mat.atlas_tex);
+}
+
+
 namespace impl {
 
-
-void main_initialization(Shader* shader) {
-	glUniform1i(shader->uniforms["tex"], 0); // texture unit 0
-	glUniform1i(shader->uniforms["heightmap_tex"], 0); // texture unit 0
-	glUniform1i(shader->uniforms["depthmap_tex"], 1); // texture unit 1
-}
-
-void main_pre_object_render(Shader* shader) {
-	vec3 ones(1,1,1);
-	glm::mat4 one(1);
-
-	if (shader->uniforms.count("ambient_col") == 1)
-		glUniform3fv(shader->uniforms["ambient_col"], 1, &ones.x);
-	
-	if (shader->uniforms.count("specular_col") == 1)
-		glUniform3fv(shader->uniforms["specular_col"], 1, &ones.x);
-	
-	if (shader->uniforms.count("diffuse_col") == 1)
-		glUniform3fv(shader->uniforms["diffuse_col"], 1, &ones.x);
-
-	if (shader->uniforms.count("phong") == 1)
-		glUniform1f(shader->uniforms["phong"], 10.0);
-
-	if (shader->uniforms.count("model") == 1)
-		glUniformMatrix4fv(shader->uniforms["model"], 1, GL_FALSE, glm::value_ptr(one));
+void main_pre_mesh_render(Shader& shader, Mesh& mesh) {
+	use_material(shader, mesh.material);
+	glUniformMatrix4fv(shader.uniforms["model"], 1, GL_FALSE, glm::value_ptr(mesh.transform));
 }
 
 
-void main_pre_render(Shader* shader) {
+void main_pre_render(Shader& shader) {
 	// We could optimize this slightly by moving these lighting components out 
 	// to only update when the lighting is changed. 
 	glm::vec3 light_inv_dir = glm::vec3(-light_dir.x, -light_dir.y, -light_dir.z);
@@ -334,71 +360,134 @@ void main_pre_render(Shader* shader) {
 	);
 	glm::mat4 depth_bias_vp = bias * depth_vp;
 
-	glUniform3fv(shader->uniforms["light_dir"], 1, &light_dir.x);
-	glUniformMatrix4fv(shader->uniforms["db_vp"], 1, GL_FALSE, glm::value_ptr(depth_bias_vp));
+	glUniform3fv(shader.uniforms["light_dir"], 1, &light_dir.x);
+	glUniformMatrix4fv(shader.uniforms["db_vp"], 1, GL_FALSE, glm::value_ptr(depth_bias_vp));
 
 	glm::mat4 view = player.get_view_matrix();
 	glm::mat4 proj = glm::perspective(3.1416f / 3, screen_width/screen_height, 0.1f, 100.0f);
 	glm::mat4 vp = proj*view;
 
-	glUniformMatrix4fv(shader->uniforms["vp"], 1, GL_FALSE, glm::value_ptr(vp));
-	glUniform3fv(shader->uniforms["view_pos"], 1, &player.camera_pos.x);
+	glUniformMatrix4fv(shader.uniforms["vp"], 1, GL_FALSE, glm::value_ptr(vp));
+	glUniform3fv(shader.uniforms["view_pos"], 1, &player.camera_pos.x);
 
 }
 
 
-void depthmap_initialization(Shader* shader) {
-
-}
-
-
-void depthmap_pre_object_render(Shader* shader) {
-	glm::mat4 one(1);
-
-	if (shader->uniforms.count("model") == 1)
-		glUniformMatrix4fv(shader->uniforms["model"], 1, GL_FALSE, glm::value_ptr(one));
-}
-
-
-void depthmap_pre_render(Shader* shader) {
-	glm::vec3 light_inv_dir = glm::vec3(-light_dir.x, -light_dir.y, -light_dir.z);
-	glm::mat4 depth_proj = glm::ortho(-12.f, 12.f, -12.f, 12.f, -8.f, 8.f);
-	glm::mat4 depth_view = glm::lookAt(light_inv_dir, glm::vec3(0,0,0), glm::vec3(0,1,0));
-	glm::mat4 depth_vp = depth_proj * depth_view;
-
-	glUniformMatrix4fv(shader->uniforms["vp"], 1, GL_FALSE, glm::value_ptr(depth_vp));
-}
-
-void initialize_shaders(Shader* main_shader, Shader* depthmap_shader) {
+void initialize_shaders(Shader* main_shader, Shader* depthmap_shader, Shader* skybox_shader) {
 	GLuint main_program = caj::load_program("src/shader/main.vert", "src/shader/main.frag");
-	*main_shader = Shader{ main_program, 0,
-		{{"tex", -1}, {"depthmap_tex", -1}, {"model", -1},
-		{"vp", -1}, {"db_vp", -1}, {"view_pos", -1},
-		{"light_dir", -1}, {"ambient_col", -1}, {"diffuse_col", -1},
-		{"specular_col", -1}, {"phong", -1}, {"heightmap_tex", -1}},
-		&main_initialization,
+	*main_shader = Shader{ main_program, 0, {
+			{"tex", -1}, {"depthmap_tex", -1}, {"model", -1},
+			{"vp", -1}, {"db_vp", -1}, {"view_pos", -1},
+			{"light_dir", -1}, {"ambient_col", -1}, {"diffuse_col", -1},
+			{"specular_col", -1}, {"phong", -1}, 
+			{"use_heightmap", -1}, {"heightmap_tex", -1},
+			{"ambient_comp", -1}
+		},
+		[](Shader& shader) {
+			glUniform1i(shader.uniforms["tex"], 0);
+			glUniform1i(shader.uniforms["use_heightmap"], false);
+			glUniform1i(shader.uniforms["depthmap_tex"], 1);
+		},
 		&main_pre_render,
-		&main_pre_object_render
+		&main_pre_mesh_render
 	};
+
 	GLuint depthmap_program = caj::load_program("src/shader/depth_rtt.vert", "src/shader/depth_rtt.frag");
 	*depthmap_shader = Shader{depthmap_program, 0,
 		{{"model", -1}, {"vp", -1}},
-		&depthmap_initialization,
-		&depthmap_pre_render,
-		&depthmap_pre_object_render
+		[](Shader& shader){},
+		[](Shader& shader) {
+			glm::vec3 light_inv_dir = glm::vec3(-light_dir.x, -light_dir.y, -light_dir.z);
+			glm::mat4 depth_proj = glm::ortho(-12.f, 12.f, -12.f, 12.f, -8.f, 8.f); // TODO: do something smarter than this
+			glm::mat4 depth_view = glm::lookAt(light_inv_dir, glm::vec3(0,0,0), glm::vec3(0,1,0));
+			glm::mat4 depth_vp = depth_proj * depth_view;
+
+			glUniformMatrix4fv(shader.uniforms["vp"], 1, GL_FALSE, glm::value_ptr(depth_vp));
+		},
+		[](Shader& shader, Mesh& mesh) {
+			glUniformMatrix4fv(shader.uniforms["model"], 1, GL_FALSE, glm::value_ptr(mesh.transform));
+		}
 	};
-	caj::initialize_shader(main_shader, 0b1111);
-	caj::initialize_shader(depthmap_shader, 0b0001);
+
+	GLuint skybox_program = caj::load_program("src/shader/skybox.vert", "src/shader/skybox.frag");
+	*skybox_shader = Shader{skybox_program, 0,
+		{{"vp", -1}, {"skybox", -1}, {"light_dir", -1}},
+		[](Shader& shader) {
+			glUniform1i(shader.uniforms["skybox"], 2);
+		},
+		[](Shader& shader) {
+			glm::mat4 view = glm::mat4(glm::mat3(player.get_view_matrix()));
+			glm::mat4 proj = glm::perspective(3.1416f / 3, screen_width/screen_height, 0.1f, 100.0f);
+			glm::mat4 vp = proj*view;
+			glUniformMatrix4fv(shader.uniforms["vp"], 1, GL_FALSE, glm::value_ptr(vp));
+
+			glUniform3fv(shader.uniforms["light_dir"], 1, &light_dir.x);
+		},
+		[](Shader& shader, Mesh& mesh) {}
+	};
+
+	caj::initialize_shader(*main_shader, 0b1111);
+	caj::initialize_shader(*depthmap_shader, 0b0001);
+	caj::initialize_shader(*skybox_shader, 0b0001);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void initialize_geometry(GLuint vbo, ModelRange* model_range) {
-	vector<Vertex> model_data = caj::generate_grid(255);
-	model_range->start_pos = 0;
-	model_range->size = model_data.size();
+void initialize_geometry(GLuint vbo, vector<string> mesh_files, ModelRange* cubemap_range, vector<Mesh>* meshes) {
+	vector<pair<vector<Vertex>, Material>> cubemap_obj_data = caj::parse_obj("assets/models/", "cubemap.obj");
+	vector<Vertex> cubemap_mesh = cubemap_obj_data.front().first;
+	cubemap_range->start_pos = 0;
+	cubemap_range->size = cubemap_mesh.size();
+
+	vector<Vertex> model_data;
+	model_data.insert(model_data.end(), cubemap_mesh.begin(), cubemap_mesh.end());
+
+	for (string& mesh_file : mesh_files) {
+		string obj_ending = ".obj";
+		if (!equal(obj_ending.rbegin(), obj_ending.rend(), mesh_file.rbegin()))
+			mesh_file.insert(mesh_file.end(), obj_ending.begin(), obj_ending.end());
+		vector<pair<vector<Vertex>, Material>> obj_meshes = caj::parse_obj("assets/models/", mesh_file);
+
+		for (pair<vector<Vertex>, Material> obj_mesh : obj_meshes) {
+			Mesh mesh;
+			mesh.model_range.start_pos = model_data.size();
+			mesh.model_range.size = obj_mesh.first.size();
+			mesh.material = obj_mesh.second;
+			
+			meshes->push_back(mesh);
+
+			model_data.insert(model_data.end(), obj_mesh.first.begin(), obj_mesh.first.end());
+		}
+	}
 
 	glBufferData(GL_ARRAY_BUFFER, model_data.size() * sizeof(Vertex), model_data.data(), GL_STATIC_DRAW);
 }
+
+
+bool draw_light_dir_widget() {
+	float yaw = light_dir.yaw();
+	float pitch = light_dir.pitch();
+
+	bool changed = false;
+
+	if (ImGui::TreeNode("Light")) {
+		yaw *= RAD2DEG;
+		pitch *= RAD2DEG;
+		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvailWidth() / 2.0 - ImGui::CalcTextSize("Yaw").x);
+		changed |= ImGui::DragFloat("Yaw##Light", &yaw, 0.2);
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
+		changed |= ImGui::DragFloat("Pitch##Light", &pitch, 0.2, -89, -5);
+
+		yaw *= DEG2RAD;
+		pitch *= DEG2RAD;
+
+		ImGui::TreePop();
+	}
+
+	light_dir = YawPitch(yaw, pitch);
+	return changed;
+}
+
 
 void draw_menus(GLuint depth_tex) {
 	show_log();
@@ -435,55 +524,75 @@ void draw_menus(GLuint depth_tex) {
         }
 	}
 	ImGui::End();
+
+	ImGui::Begin("Lights");
+	{
+		draw_light_dir_widget();
+		ImGui::ColorEdit3("Ambient", &amb_col.x);
+		ImGui::ColorEdit3("Diffuse", &diff_col.x);
+		ImGui::ColorEdit3("Specular", &spec_col.x);
+	}
+	ImGui::End();
 }
 
 
-void draw_depthmaps(GLuint framebuffer, Shader shader, ModelRange model_range) {
+
+void draw_depthmaps(GLuint framebuffer, Shader shader, vector<Mesh>& meshes) {
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 	glViewport(0, 0, 4096, 4096);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	draw_object(shader, model_range);
+	draw_meshes(shader, meshes);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void draw_main(Shader shader, ModelRange model_range) {
+void draw_main(Shader skybox_shader, ModelRange skybox_range, Shader shader, vector<Mesh>& meshes) {
 	glViewport(0,0, screen_width, screen_height);
-	glClearColor(0.4f, 0.5f, 0.6f, 1.0f);
+	glClearColor(0.4f, 0.5f, 0.6f, 1.0f); // TODO: we don't need to clear COLOR because we have skybox?
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	draw_object(shader, model_range);
+	glDepthMask(GL_FALSE);
+	glUseProgram(skybox_shader.program);
+	glBindVertexArray(skybox_shader.vao);
+	skybox_shader.pre_render(skybox_shader);
+	draw_range(skybox_range);
+	glDepthMask(GL_TRUE);
+
+	draw_meshes(shader, meshes);
 }
 
 
 }  // namespace impl
+
 }  // namespace caj
 
 
 int main(int argc, char* argv[]) {
-	Shader main_shader, depthmap_shader;
-	GLuint framebuffer, depthmap_tex, atlas_tex, vbo;
-	ModelRange geometry;
+	Shader main_shader, depthmap_shader, skybox_shader;
+	GLuint framebuffer, depthmap_tex, atlas_tex, skybox_tex, vbo;
+	ModelRange cubemap;
+	vector<Mesh> meshes;
 
 	caj::initialize_environment();
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	caj::initialize_buffer(&vbo);
 	// fill buffer
-	caj::impl::initialize_geometry(vbo, &geometry);
+	caj::impl::initialize_geometry(vbo, {"triangle"}, &cubemap, &meshes);
 	// set up attributes
-	caj::impl::initialize_shaders(&main_shader, &depthmap_shader);
-	atlas_tex = caj::create_atlas({
-		"assets/floor.png", "assets/floor_specular.png", "assets/floor_normal.png", "assets/floor_height.png"
+	caj::impl::initialize_shaders(&main_shader, &depthmap_shader, &skybox_shader);
+	caj::create_atlas({
+		"assets/ship_atlas.png", "assets/ship_atlas_specular.png", "assets/ship_atlas_norm.png", "assets/gray.png",
+		"assets/beach_atlas.png", "assets/beach_atlas_specular.png", "assets/base_normal.png", "assets/gray.png"
 	});
+	caj::create_skybox("assets/skybox");
 	caj::initialize_depthmaps(&framebuffer, &depthmap_tex);
 	caj::initialize_imgui();
 
 	static int last_ticks = SDL_GetTicks();
 
     bool quit = false;
-    while (!quit) {
+    for (;;) {
 		quit = caj::handle_input();
 		if (quit) break;
 
@@ -497,9 +606,8 @@ int main(int argc, char* argv[]) {
 
 		caj::impl::draw_menus(depthmap_tex);
 
-		caj::impl::draw_depthmaps(framebuffer, depthmap_shader, geometry);
-		caj::impl::draw_main(main_shader, geometry);
-		// TODO: how do we determine which objects to render 
+		caj::impl::draw_depthmaps(framebuffer, depthmap_shader, meshes);
+		caj::impl::draw_main(skybox_shader, cubemap, main_shader, meshes);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

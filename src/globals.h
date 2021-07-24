@@ -22,6 +22,7 @@ struct Vertex {
 	vec3 texcoord;
 	vec3 tangent;
 
+	// TODO: violates only pointers set members
 	static inline void set_tangents(Vertex& v1, Vertex& v2, Vertex& v3) {
 		glm::vec3 tangent;
 		glm::vec3 edge1 = v2.pos - v1.pos;
@@ -41,9 +42,34 @@ struct Vertex {
 	}
 };
 
+struct Material {
+	string name;
+	vec3 ambient_color;
+	vec3 diffuse_color;
+	vec3 specular_color;
+	float phong;
+
+	GLuint atlas_tex;
+	int layer_offset; // z coord is layer_offset * layer_width
+
+	// TODO: these are weird values... They will only be used temporarily...
+	// Once we get all of the geometry, we load the atlas, and reference the
+	// textures with the above...
+	string base_color_tex_file;
+	string specular_tex_file;
+	string normal_tex_file;
+	string height_tex_file;
+};
+
 struct ModelRange {
 	int start_pos = 0;
 	int size = 0;
+};
+
+struct Mesh { // This mesh does not yet support custom shaders.
+	Material material;
+	ModelRange model_range;
+	glm::mat4 transform = glm::mat4(1);
 };
 
 struct Shader {
@@ -53,9 +79,9 @@ struct Shader {
 	map<string, GLuint> uniforms;
 
 	// oddly, this doesn't need to be a part of the struct, but helps uniformity without much cost
-	void (*initialization)(Shader* shader);
+	void (*initialization)(Shader& shader);
 	// per frame uniform update callback, array bound before and unbound after
-	void (*pre_render)(Shader* shader);
+	void (*pre_render)(Shader& shader);
 	// per object per frame uniform update callback, array bound before and unbound after
-	void (*pre_object_render)(Shader* shader);
+	void (*pre_mesh_render)(Shader& shader, Mesh& mesh);
 };
