@@ -1,0 +1,11 @@
+directional_light
+    direction 1 1 -1
+    depth_proj_min -5 -5 -5
+    depth_proj_max 5 5 5
+/directional_light
+obj
+    file fort_sorrow
+    translate 0 0 0
+    scale 1 1 1
+    rotation 0 0 0
+/obj

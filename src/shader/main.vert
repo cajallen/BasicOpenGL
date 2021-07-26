@@ -19,8 +19,7 @@ uniform mat4 vp; // once per frame
 uniform mat4 db_vp; // once per light direction change
 uniform sampler2DArray tex; // once
 
-uniform float zcoord;
-uniform float height_factor;
+uniform float height_tex_offset;
 
 uniform vec3 view_pos; // once per frame
 uniform vec3 light_dir; // once per light direction change
@@ -28,7 +27,7 @@ uniform vec3 light_dir; // once per light direction change
 
 void main() {
     vs_out.pos = vec3(model * vec4(inPosition, 1.0));
-    vs_out.texcoord = inTexcoord + vec3(0,0,zcoord);
+    vs_out.texcoord = inTexcoord;
     
     mat3 normalMatrix = transpose(inverse(mat3(model)));
     vec3 T = normalize(normalMatrix * inTangent);
@@ -42,7 +41,7 @@ void main() {
     vs_out.tangent_pos = TBN * vs_out.pos;
     
     // ternary is to avoid read
-    float norm_offset = height_factor != 0 ? 2.0 * height_factor * texture(tex, inTexcoord + vec3(0,0,zcoord+3.0)).r - height_factor : 0.0;
+    float norm_offset = height_tex_offset != -1.0 ? 2.0 * texture(tex, inTexcoord + vec3(0,0,height_tex_offset)).r: 0.0;
     vec3 corrected_pos = inPosition + inNormal * norm_offset;
     
     vs_out.shadowcoord = db_vp * model * vec4(corrected_pos, 1.0);

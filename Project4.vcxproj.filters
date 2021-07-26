@@ -84,6 +84,9 @@
     <ClCompile Include="src\grid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\lights.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\lib\imgui\backends\imgui_impl_opengl3.h">
@@ -476,8 +479,46 @@
     <ClInclude Include="src\grid.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\lights.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\lib\SDL\lib\x64\SDL2.dll" />
+    <None Include="assets\models\cubemap.mtl" />
+    <None Include="assets\models\fort_sorrow.mtl" />
+    <None Include="assets\models\triangle.mtl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\base_normal.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\floor.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\floor_height.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\floor_normal.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\floor_specular.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\gray.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\sorrow_base.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\sorrow_env_base.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\sorrow_height.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\sorrow_specular.png">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

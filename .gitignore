@@ -4,3 +4,4 @@
 /src/.vscode
 *.user
 *.ini
+/backup*

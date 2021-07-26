@@ -11,7 +11,6 @@
 #include <string>
 #include <stdexcept>
 #include <iomanip>
-#include "obj_loader.h"
 
 using std::string;
 using std::to_string;
@@ -61,7 +60,6 @@ struct vec3 {
     vec3() : x(0), y(0), z(0) {}
 	vec3(int bin); // an odd constructor, meant to take binary inputs for directions
 	vec3(glm::vec3 v3) : x(v3.x), y(v3.y), z(v3.z) {}
-	vec3(objl::Vector3 v3) : x(v3.X), y(v3.Y), z(v3.Z) {}
 
     vec3 clamp(float min, float max) const { return vec3(fclamp(x, min, max), fclamp(y, min, max), fclamp(z, min, max)); }
 

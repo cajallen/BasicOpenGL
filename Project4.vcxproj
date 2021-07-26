@@ -33,6 +33,7 @@
     <ClCompile Include="src\lib\imgui\imgui_draw.cpp" />
     <ClCompile Include="src\lib\imgui\imgui_tables.cpp" />
     <ClCompile Include="src\lib\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="src\lights.cpp" />
     <ClCompile Include="src\log.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\player.cpp" />
@@ -156,13 +157,29 @@
     <ClInclude Include="src\lib\stb\stb_image.h" />
     <ClInclude Include="src\lib\stb\stb_image_write.h" />
     <ClInclude Include="src\lib\vec3.h" />
+    <ClInclude Include="src\lights.h" />
     <ClInclude Include="src\log.h" />
     <ClInclude Include="src\main.h" />
     <ClInclude Include="src\model_loader.h" />
     <ClInclude Include="src\player.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="assets\models\cubemap.mtl" />
+    <None Include="assets\models\fort_sorrow.mtl" />
+    <None Include="assets\models\triangle.mtl" />
     <None Include="src\lib\SDL\lib\x64\SDL2.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\base_normal.png" />
+    <Image Include="assets\floor.png" />
+    <Image Include="assets\floor_height.png" />
+    <Image Include="assets\floor_normal.png" />
+    <Image Include="assets\floor_specular.png" />
+    <Image Include="assets\gray.png" />
+    <Image Include="assets\sorrow_base.png" />
+    <Image Include="assets\sorrow_env_base.png" />
+    <Image Include="assets\sorrow_height.png" />
+    <Image Include="assets\sorrow_specular.png" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

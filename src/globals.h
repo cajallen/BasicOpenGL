@@ -11,7 +11,6 @@
 #include <map>
 #include <fmt/format.h>
 
-#include "obj_loader.h"
 #include "vec3.h"
 
 using namespace std;
@@ -44,18 +43,19 @@ struct Vertex {
 
 struct Material {
 	string name;
-	vec3 ambient_color;
-	vec3 diffuse_color;
-	vec3 specular_color;
-	float phong;
+	vec3 ambient_tint = vec3(0,0,0);
+	vec3 diffuse_tint = vec3(0,0,0);
+	vec3 specular_tint = vec3(0,0,0);
+	float phong = 8.0;
 
 	GLuint atlas_tex;
-	int layer_offset; // z coord is layer_offset * layer_width
+	float base_tex_offset = -1.0;
+	float specular_tex_offset = -1.0;
+	float normal_tex_offset = -1.0;
+	float height_tex_offset = -1.0;
 
 	// TODO: these are weird values... They will only be used temporarily...
-	// Once we get all of the geometry, we load the atlas, and reference the
-	// textures with the above...
-	string base_color_tex_file;
+	string base_tex_file;
 	string specular_tex_file;
 	string normal_tex_file;
 	string height_tex_file;

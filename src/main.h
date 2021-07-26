@@ -10,6 +10,7 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "glm/gtx/transform.hpp"
 
 #include <fstream>
 #include <string>
@@ -17,18 +18,14 @@
 #include <stb_image.h>
 #include <sstream>
 #include <fstream>
+#include <filesystem>
 
 #include "globals.h"
 #include "log.h"
 #include "model_loader.h"
 #include "player.h"
-#include "obj_loader.h"
 #include "grid.h"
+#include "lights.h"
 
 using namespace std;
 using namespace fmt;
-
-GLuint LoadVertexSource(string s);
-GLuint LoadFragmentSource(string s);
-GLuint JoinShaders(GLuint vert, GLuint frag);
-void UpdateShaderCameraUniforms(GLuint shader_program);

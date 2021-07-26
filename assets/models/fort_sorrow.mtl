@@ -2,25 +2,24 @@
 # Material Count: 2
 
 newmtl Environment
-Ns 18.000005
+Ns 0.000000
 Ka 1.000000 1.000000 1.000000
-Kd 0.588000 0.588000 0.588000
+Kd 1.000000 1.000000 1.000000
 Ks 0.000000 0.000000 0.000000
 Ke 0.000000 0.000000 0.000000
 Ni 1.450000
 d 1.000000
 illum 1
-map_Kd C:\\Users\\cajal\\Downloads\\sea-keep-lonely-watcher\\source\\DAE\\1DAE2 - 2 semester\\Game Art\\Assignments\\AssN3\\project folder\\tex\\texture_environment.jpg
-map_d C:\\Users\\cajal\\Downloads\\sea-keep-lonely-watcher\\source\\DAE\\1DAE2 - 2 semester\\Game Art\\Assignments\\AssN3\\project folder\\tex\\texture_environment_opacity.jpg
+map_Kd C:\\Users\\cajal\\Documents\\Development\\BasicOpenGL\\assets\\sorrow_env_base.png
 
 newmtl Fortress
-Ns 18.000005
+Ns 323.999994
 Ka 1.000000 1.000000 1.000000
-Kd 0.588000 0.588000 0.588000
-Ks 0.000000 0.000000 0.000000
+Kd 1.000000 1.000000 1.000000
+Ks 1.000000 1.000000 1.000000
 Ke 0.000000 0.000000 0.000000
-Ni 1.450000
+Ni 1.000000
 d 1.000000
-illum 1
-map_Kd C:\\Users\\cajal\\Downloads\\sea-keep-lonely-watcher\\source\\DAE\\1DAE2 - 2 semester\\Game Art\\Assignments\\AssN3\\project folder\\tex\\texture_building.jpg
-map_d C:\\Users\\cajal\\Downloads\\sea-keep-lonely-watcher\\source\\DAE\\1DAE2 - 2 semester\\Game Art\\Assignments\\AssN3\\project folder\\tex\\texture_building_opacity.jpg
+illum 2
+map_Kd C:\\Users\\cajal\\Documents\\Development\\BasicOpenGL\\assets\\sorrow_base.png
+map_Ks C:\\Users\\cajal\\Documents\\Development\\BasicOpenGL\\assets\\sorrow_specular.png

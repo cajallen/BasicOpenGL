@@ -16,13 +16,8 @@ ImGuiIO* io;
 const char* glsl_version = "#version 330";
 SDL_GLContext context;
 
-vec3 light_dir = vec3(1,1,-2).normalized();
+DirectionalLight sun;
 Player player;
-
-vec3 amb_col = vec3(0.3,0.3,0.3);
-vec3 diff_col = vec3(1.0,1.0,1.0);
-vec3 spec_col = vec3(0.5,0.5,0.5);
-
 
 void initialize_environment() {
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
@@ -46,6 +41,7 @@ void initialize_environment() {
         IM_ASSERT("gladLoadGLLoader failed" && 0);
 	
 	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_BLEND);
 }
 
 void initialize_imgui() {
@@ -196,8 +192,12 @@ bool load_atlas(vector<string> file_names, GLuint* out_texture) {
 		unsigned char* data;
 
 		TempImage(string fn) : file_name(fn) {
+			auto start_time = SDL_GetTicks();
+			stbi_set_flip_vertically_on_load(true); // TODO: not sure why this is needed. find a spec somewhere maybe?
             data = stbi_load(fn.c_str(), &wid, &hei, NULL, 4);
-			if (data == NULL) { log(fn + " failed to load"); }
+			stbi_set_flip_vertically_on_load(false);
+			if (data == NULL) { log(format("{} failed to load.. cwd: {}.. stbi: {}", fn, filesystem::current_path().string(), stbi_failure_reason())); }
+			else { caj::log(fmt::format(fn + " loaded in {}", (SDL_GetTicks() - start_time) / 1000.0)); }
 		}
 	};
 	vector<TempImage> images;
@@ -270,10 +270,35 @@ void load_cubemap(string folder, GLuint* tex_id) {
 }
 
 
-GLuint create_atlas(vector<string> file_names) {
+GLuint initialize_atlas(vector<Mesh>& meshes) {
 	glActiveTexture(BASE_TEXUNIT);
 	GLuint tex_id;
+
+	vector<string> file_names;
+
+	for (Mesh& mesh : meshes) {
+		if (mesh.material.base_tex_file != "") {
+			mesh.material.base_tex_offset = (float) file_names.size();
+			file_names.push_back(mesh.material.base_tex_file);
+		}
+		if (mesh.material.specular_tex_file != "") {
+			mesh.material.specular_tex_offset = (float) file_names.size();
+			file_names.push_back(mesh.material.specular_tex_file);
+		}
+		if (mesh.material.normal_tex_file != "") {
+			mesh.material.normal_tex_offset = (float) file_names.size();
+			file_names.push_back(mesh.material.normal_tex_file);
+		}
+		if (mesh.material.height_tex_file != "") {
+			mesh.material.height_tex_offset = (float) file_names.size();
+			file_names.push_back(mesh.material.height_tex_file);
+		}
+	}
+
 	load_atlas(file_names, &tex_id);
+	for (Mesh& mesh : meshes) {
+		mesh.material.atlas_tex = tex_id;
+	}
 	return tex_id;
 }
 
@@ -325,11 +350,14 @@ void draw_meshes(Shader& shader, vector<Mesh>& meshes) {
 
 
 void use_material(Shader& shader, Material& mat) {
-	glUniform3fv(shader.uniforms["ambient_col"], 1, &mat.ambient_color.x);
-	glUniform3fv(shader.uniforms["specular_col"], 1, &mat.specular_color.x);
-	glUniform3fv(shader.uniforms["diffuse_col"], 1, &mat.diffuse_color.x);
+	glUniform3fv(shader.uniforms["ambient_tint"], 1, &mat.ambient_tint.x);
+	glUniform3fv(shader.uniforms["specular_tint"], 1, &mat.specular_tint.x);
+	glUniform3fv(shader.uniforms["diffuse_tint"], 1, &mat.diffuse_tint.x);
 	glUniform1f(shader.uniforms["phong"], mat.phong);
-	glUniform1f(shader.uniforms["zcoord"], mat.layer_offset * 4.0);
+	glUniform1f(shader.uniforms["base_tex_offset"], mat.base_tex_offset);
+	glUniform1f(shader.uniforms["specular_tex_offset"], mat.specular_tex_offset);
+	glUniform1f(shader.uniforms["normal_tex_offset"], mat.normal_tex_offset);
+	glUniform1f(shader.uniforms["height_tex_offset"], mat.height_tex_offset);
 
 	glActiveTexture(BASE_TEXUNIT);
 	glBindTexture(GL_TEXTURE_2D_ARRAY, mat.atlas_tex);
@@ -338,19 +366,9 @@ void use_material(Shader& shader, Material& mat) {
 
 namespace impl {
 
-void main_pre_mesh_render(Shader& shader, Mesh& mesh) {
-	use_material(shader, mesh.material);
-	glUniformMatrix4fv(shader.uniforms["model"], 1, GL_FALSE, glm::value_ptr(mesh.transform));
-}
-
 
 void main_pre_render(Shader& shader) {
-	// We could optimize this slightly by moving these lighting components out 
-	// to only update when the lighting is changed. 
-	glm::vec3 light_inv_dir = glm::vec3(-light_dir.x, -light_dir.y, -light_dir.z);
-	glm::mat4 depth_proj = glm::ortho(-12.f, 12.f, -12.f, 12.f, -8.f, 8.f);
-	glm::mat4 depth_view = glm::lookAt(light_inv_dir, glm::vec3(0,0,0), glm::vec3(0,1,0));
-	glm::mat4 depth_vp = depth_proj * depth_view;
+	glm::mat4 depth_vp = sun.vp;
 
 	glm::mat4 bias(
 		0.5, 0.0, 0.0, 0.0, 
@@ -360,7 +378,7 @@ void main_pre_render(Shader& shader) {
 	);
 	glm::mat4 depth_bias_vp = bias * depth_vp;
 
-	glUniform3fv(shader.uniforms["light_dir"], 1, &light_dir.x);
+	glUniform3fv(shader.uniforms["light_dir"], 1, &sun.direction.x);
 	glUniformMatrix4fv(shader.uniforms["db_vp"], 1, GL_FALSE, glm::value_ptr(depth_bias_vp));
 
 	glm::mat4 view = player.get_view_matrix();
@@ -377,34 +395,33 @@ void initialize_shaders(Shader* main_shader, Shader* depthmap_shader, Shader* sk
 	GLuint main_program = caj::load_program("src/shader/main.vert", "src/shader/main.frag");
 	*main_shader = Shader{ main_program, 0, {
 			{"tex", -1}, {"depthmap_tex", -1}, {"model", -1},
-			{"vp", -1}, {"db_vp", -1}, {"view_pos", -1},
-			{"light_dir", -1}, {"ambient_col", -1}, {"diffuse_col", -1},
-			{"specular_col", -1}, {"phong", -1}, 
-			{"use_heightmap", -1}, {"heightmap_tex", -1},
-			{"ambient_comp", -1}
+			{"vp", -1}, {"db_vp", -1}, {"view_pos", -1}, {"light_dir", -1}, 
+			{"ambient_tint", -1}, {"diffuse_tint", -1}, {"specular_tint", -1}, 
+			{"base_tex_offset", -1}, {"specular_tex_offset", -1}, {"normal_tex_offset", -1}, {"height_tex_offset", -1},
+			{"phong", -1}
 		},
 		[](Shader& shader) {
 			glUniform1i(shader.uniforms["tex"], 0);
-			glUniform1i(shader.uniforms["use_heightmap"], false);
 			glUniform1i(shader.uniforms["depthmap_tex"], 1);
 		},
 		&main_pre_render,
-		&main_pre_mesh_render
+		[](Shader& shader, Mesh& mesh) {
+			use_material(shader, mesh.material);
+			glUniformMatrix4fv(shader.uniforms["model"], 1, GL_FALSE, glm::value_ptr(mesh.transform));
+		}
 	};
 
 	GLuint depthmap_program = caj::load_program("src/shader/depth_rtt.vert", "src/shader/depth_rtt.frag");
 	*depthmap_shader = Shader{depthmap_program, 0,
-		{{"model", -1}, {"vp", -1}},
-		[](Shader& shader){},
+		{{"tex", -1}, {"model", -1}, {"vp", -1}},
 		[](Shader& shader) {
-			glm::vec3 light_inv_dir = glm::vec3(-light_dir.x, -light_dir.y, -light_dir.z);
-			glm::mat4 depth_proj = glm::ortho(-12.f, 12.f, -12.f, 12.f, -8.f, 8.f); // TODO: do something smarter than this
-			glm::mat4 depth_view = glm::lookAt(light_inv_dir, glm::vec3(0,0,0), glm::vec3(0,1,0));
-			glm::mat4 depth_vp = depth_proj * depth_view;
-
-			glUniformMatrix4fv(shader.uniforms["vp"], 1, GL_FALSE, glm::value_ptr(depth_vp));
+			glUniform1i(shader.uniforms["tex"], 0);
+		},
+		[](Shader& shader) {
+			glUniformMatrix4fv(shader.uniforms["vp"], 1, GL_FALSE, glm::value_ptr(sun.vp));
 		},
 		[](Shader& shader, Mesh& mesh) {
+			glUniform1f(shader.uniforms["base_tex_offset"], mesh.material.base_tex_offset);
 			glUniformMatrix4fv(shader.uniforms["model"], 1, GL_FALSE, glm::value_ptr(mesh.transform));
 		}
 	};
@@ -421,7 +438,7 @@ void initialize_shaders(Shader* main_shader, Shader* depthmap_shader, Shader* sk
 			glm::mat4 vp = proj*view;
 			glUniformMatrix4fv(shader.uniforms["vp"], 1, GL_FALSE, glm::value_ptr(vp));
 
-			glUniform3fv(shader.uniforms["light_dir"], 1, &light_dir.x);
+			glUniform3fv(shader.uniforms["light_dir"], 1, &sun.direction.x);
 		},
 		[](Shader& shader, Mesh& mesh) {}
 	};
@@ -459,13 +476,24 @@ void initialize_geometry(GLuint vbo, vector<string> mesh_files, ModelRange* cube
 		}
 	}
 
+	Mesh mesh;
+	vector<Vertex> grid = caj::generate_grid(1);
+	mesh.model_range.start_pos = model_data.size();
+	mesh.model_range.size = grid.size();
+
+	mesh.transform = glm::translate(glm::vec3(-5.f, -5.f, 0.f)) * glm::scale(glm::vec3(10.f, 10.f, 10.f));
+
+	meshes->push_back(mesh);
+
+	model_data.insert(model_data.end(), grid.begin(), grid.end());
+
 	glBufferData(GL_ARRAY_BUFFER, model_data.size() * sizeof(Vertex), model_data.data(), GL_STATIC_DRAW);
 }
 
 
-bool draw_light_dir_widget() {
-	float yaw = light_dir.yaw();
-	float pitch = light_dir.pitch();
+void draw_light_dir_widget() {
+	float yaw = sun.direction.yaw();
+	float pitch = sun.direction.pitch();
 
 	bool changed = false;
 
@@ -484,8 +512,7 @@ bool draw_light_dir_widget() {
 		ImGui::TreePop();
 	}
 
-	light_dir = YawPitch(yaw, pitch);
-	return changed;
+	if (changed) sun.set_direction(YawPitch(yaw, pitch));
 }
 
 
@@ -528,9 +555,6 @@ void draw_menus(GLuint depth_tex) {
 	ImGui::Begin("Lights");
 	{
 		draw_light_dir_widget();
-		ImGui::ColorEdit3("Ambient", &amb_col.x);
-		ImGui::ColorEdit3("Diffuse", &diff_col.x);
-		ImGui::ColorEdit3("Specular", &spec_col.x);
 	}
 	ImGui::End();
 }
@@ -541,7 +565,7 @@ void draw_depthmaps(GLuint framebuffer, Shader shader, vector<Mesh>& meshes) {
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 	glViewport(0, 0, 4096, 4096);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glClear(GL_DEPTH_BUFFER_BIT);
 
 	draw_meshes(shader, meshes);
 
@@ -549,9 +573,9 @@ void draw_depthmaps(GLuint framebuffer, Shader shader, vector<Mesh>& meshes) {
 }
 
 void draw_main(Shader skybox_shader, ModelRange skybox_range, Shader shader, vector<Mesh>& meshes) {
-	glViewport(0,0, screen_width, screen_height);
-	glClearColor(0.4f, 0.5f, 0.6f, 1.0f); // TODO: we don't need to clear COLOR because we have skybox?
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glViewport(0, 0, screen_width, screen_height);
+	glClearColor(0.4f, 0.0f, 1.0f, 1.0f);
+	glClear(GL_DEPTH_BUFFER_BIT); // we don't clear color because we have a skybox
 
 	glDepthMask(GL_FALSE);
 	glUseProgram(skybox_shader.program);
@@ -570,7 +594,7 @@ void draw_main(Shader skybox_shader, ModelRange skybox_range, Shader shader, vec
 
 
 int main(int argc, char* argv[]) {
-	Shader main_shader, depthmap_shader, skybox_shader;
+	Shader main_shader, depthmap_shader, skybox_shader, water_shader;
 	GLuint framebuffer, depthmap_tex, atlas_tex, skybox_tex, vbo;
 	ModelRange cubemap;
 	vector<Mesh> meshes;
@@ -578,13 +602,10 @@ int main(int argc, char* argv[]) {
 	caj::initialize_environment();
 	caj::initialize_buffer(&vbo);
 	// fill buffer
-	caj::impl::initialize_geometry(vbo, {"triangle"}, &cubemap, &meshes);
+	caj::impl::initialize_geometry(vbo, {"fort_sorrow"}, &cubemap, &meshes);
 	// set up attributes
 	caj::impl::initialize_shaders(&main_shader, &depthmap_shader, &skybox_shader);
-	caj::create_atlas({
-		"assets/ship_atlas.png", "assets/ship_atlas_specular.png", "assets/ship_atlas_norm.png", "assets/gray.png",
-		"assets/beach_atlas.png", "assets/beach_atlas_specular.png", "assets/base_normal.png", "assets/gray.png"
-	});
+	caj::initialize_atlas(meshes);
 	caj::create_skybox("assets/skybox");
 	caj::initialize_depthmaps(&framebuffer, &depthmap_tex);
 	caj::initialize_imgui();
