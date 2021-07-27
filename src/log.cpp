@@ -10,12 +10,9 @@ void log(string s) {
 }
 
 void show_log() {
-    ImGui::Begin("Log"); {
-        for (string s : log_strings) {
-            ImGui::Text("%s", s.c_str());
-        }
+    for (string s : log_strings) {
+        ImGui::Text("%s", s.c_str());
     }
-    ImGui::End();
 }
 
 }  // namespace caj

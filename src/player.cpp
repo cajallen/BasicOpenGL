@@ -47,33 +47,14 @@ void Player::update(float delta) {
 	if (using_mouse)
 		ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 
-	float yaw = look_dir.yaw();
-	float pitch = look_dir.pitch();
+	float yaw = look_dir.yaw() * RAD2DEG;
+	float pitch = look_dir.pitch() * RAD2DEG;
 
 	yaw += (pan_speed * mouse_diff_x);
 	pitch += (pan_speed * mouse_diff_y);
 
-	ImGui::Begin("Log");
-	yaw *= RAD2DEG;
-	pitch *= RAD2DEG;
-
-	pitch = fclamp(pitch, -89.5, 89.5);
-
-	if (ImGui::TreeNode("Player")) {
-		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Position").x - ImGui::GetStyle().WindowPadding.x);
-		ImGui::DragFloat3("Position##Player", &logic_pos.x, 0.05);
-		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvailWidth() / 2.0 - ImGui::CalcTextSize("Yaw").x);
-		ImGui::DragFloat("Yaw##Player", &yaw, 0.2);
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
-		ImGui::DragFloat("Pitch##Player", &pitch, 0.2, -89.5, 89.5);
-		ImGui::DragFloat("Camera Speed", &pan_speed, 0.0001, 0.0005, 0.05, "%.4f");
-		ImGui::DragFloat("Move Speed", &noclip_speed, 0.05);
-		ImGui::TreePop();
-	}
-	yaw *= DEG2RAD;
-	pitch *= DEG2RAD;
-	ImGui::End();
+	yaw = yaw * DEG2RAD;
+	pitch = fclamp(pitch, -89, 89) * DEG2RAD;
 
 	look_dir = YawPitch(yaw, pitch);
 

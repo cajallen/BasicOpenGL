@@ -364,6 +364,35 @@ void use_material(Shader& shader, Material& mat) {
 }
 
 
+
+
+void draw_depthmaps(GLuint framebuffer, Shader shader, vector<Mesh>& meshes) {
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	glViewport(0, 0, 4096, 4096);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	draw_meshes(shader, meshes);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void draw_main(Shader skybox_shader, ModelRange skybox_range, Shader shader, vector<Mesh>& meshes) {
+	glViewport(0, 0, screen_width, screen_height);
+	glClearColor(0.4f, 0.0f, 1.0f, 1.0f);
+	glClear(GL_DEPTH_BUFFER_BIT); // we don't clear color because we have a skybox
+
+	glDepthMask(GL_FALSE);
+	glUseProgram(skybox_shader.program);
+	glBindVertexArray(skybox_shader.vao);
+	skybox_shader.pre_render(skybox_shader);
+	draw_range(skybox_range);
+	glDepthMask(GL_TRUE);
+
+	draw_meshes(shader, meshes);
+}
+
+
 namespace impl {
 
 
@@ -491,102 +520,132 @@ void initialize_geometry(GLuint vbo, vector<string> mesh_files, ModelRange* cube
 }
 
 
-void draw_light_dir_widget() {
-	float yaw = sun.direction.yaw();
-	float pitch = sun.direction.pitch();
+void sun_menu() {
+	if (ImGui::TreeNode("Sun")) {
+		float yaw = sun.direction.yaw();
+		float pitch = sun.direction.pitch();
 
-	bool changed = false;
-
-	if (ImGui::TreeNode("Light")) {
+		bool changed = false;
 		yaw *= RAD2DEG;
 		pitch *= RAD2DEG;
 		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvailWidth() / 2.0 - ImGui::CalcTextSize("Yaw").x);
 		changed |= ImGui::DragFloat("Yaw##Light", &yaw, 0.2);
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
-		changed |= ImGui::DragFloat("Pitch##Light", &pitch, 0.2, -89, -5);
+		changed |= ImGui::DragFloat("Pitch##Light", &pitch, 0.2, 1, 89);
 
 		yaw *= DEG2RAD;
 		pitch *= DEG2RAD;
 
+		if (changed) sun.set_direction(YawPitch(yaw, pitch));
+
 		ImGui::TreePop();
 	}
-
-	if (changed) sun.set_direction(YawPitch(yaw, pitch));
 }
 
 
-void draw_menus(GLuint depth_tex) {
-	show_log();
+void player_menu(Player& player) {
+	float yaw = player.look_dir.yaw() * RAD2DEG;
+	float pitch = player.look_dir.pitch() * RAD2DEG;
 
-	ImGui::Begin("ShadowMap");
+	ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Position").x - ImGui::GetStyle().WindowPadding.x);
+	ImGui::DragFloat3("Position##Player", &player.logic_pos.x, 0.05);
+	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvailWidth() / 2.0 - ImGui::CalcTextSize("Yaw").x);
+	ImGui::DragFloat("Yaw##Player", &yaw, 0.2);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(-ImGui::CalcTextSize("Pitch").x - ImGui::GetStyle().WindowPadding.x);
+	ImGui::DragFloat("Pitch##Player", &pitch, 0.2, -89.5, 89.5);
+	ImGui::DragFloat("Camera Speed", &player.pan_speed, 0.005, 0.01, 0.2, "%.3f");
+	ImGui::DragFloat("Move Speed", &player.noclip_speed, 0.05);
+
+	yaw *= DEG2RAD;
+	pitch *= DEG2RAD;
+
+	player.look_dir = YawPitch(yaw, pitch);
+}
+
+
+void mesh_menu(Mesh& mesh) {
+	if (ImGui::TreeNode(format("{}", (void*) &mesh).c_str())) {
+		glm::vec3 scale, translation;
+		glm::quat orientation;
+		// not using skew or perspective
+		glm::vec3 skew;
+		glm::vec4 pers;
+		glm::decompose(mesh.transform, scale, orientation, translation, skew, pers);
+		ImGui::PushID(&mesh);
+		ImGui::DragFloat3("Scale", &scale.x, 0.01);
+		ImGui::DragFloat3("Position", &translation.x, 0.01);
+		ImGui::PopID();
+		mesh.transform = glm::translate(translation) * glm::scale(scale);
+		ImGui::TreePop();
+	}
+}
+
+
+void tex_view_menu(GLuint tex) {
+	ImTextureID imgui_shadowmap_id = ImTextureID(GLuint(tex));
 	{
-		ImTextureID imgui_shadowmap_id = ImTextureID(GLuint(depth_tex));
+		ImVec2 pos = ImGui::GetCursorScreenPos();
+		ImVec2 size = ImGui::GetContentRegionAvail();
+		ImVec2 uv_min = ImVec2(0.0f, 0.0f);                 // Top-left
+		ImVec2 uv_max = ImVec2(1.0f, 1.0f);                 // Lower-right
+		ImVec4 tint_col = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);   // No tint
+		ImVec4 border_col = ImVec4(1.0f, 1.0f, 1.0f, 0.5f); // 50% opaque white
+		ImGui::Image(imgui_shadowmap_id, size, uv_min, uv_max, tint_col, border_col);
+		if (ImGui::IsItemHovered())
 		{
-            ImVec2 pos = ImGui::GetCursorScreenPos();
-			ImVec2 size = ImGui::GetContentRegionAvail();
-            ImVec2 uv_min = ImVec2(0.0f, 0.0f);                 // Top-left
-            ImVec2 uv_max = ImVec2(1.0f, 1.0f);                 // Lower-right
-            ImVec4 tint_col = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);   // No tint
-            ImVec4 border_col = ImVec4(1.0f, 1.0f, 1.0f, 0.5f); // 50% opaque white
-            ImGui::Image(imgui_shadowmap_id, size, uv_min, uv_max, tint_col, border_col);
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                float region_sz = 32.0f;
-                float region_x = ImGui::GetIO().MousePos.x - pos.x - region_sz * 0.5f;
-                float region_y = ImGui::GetIO().MousePos.y - pos.y - region_sz * 0.5f;
-                float zoom = 4.0f;
-                if (region_x < 0.0f) { region_x = 0.0f; }
-                else if (region_x > size.x - region_sz) { region_x = size.x - region_sz; }
-                if (region_y < 0.0f) { region_y = 0.0f; }
-                else if (region_y > size.y - region_sz) { region_y = size.y - region_sz; }
-                ImGui::Text("Min: (%.2f, %.2f)", region_x, region_y);
-                ImGui::Text("Max: (%.2f, %.2f)", region_x + region_sz, region_y + region_sz);
-                ImVec2 uv0 = ImVec2((region_x) / size.x, (region_y) / size.y);
-                ImVec2 uv1 = ImVec2((region_x + region_sz) / size.x, (region_y + region_sz) / size.y);
-                ImGui::Image(imgui_shadowmap_id, ImVec2(region_sz * zoom, region_sz * zoom), uv0, uv1, tint_col, border_col);
-                ImGui::EndTooltip();
-            }
-        }
+			ImGui::BeginTooltip();
+			float region_sz = 32.0f;
+			float region_x = ImGui::GetIO().MousePos.x - pos.x - region_sz * 0.5f;
+			float region_y = ImGui::GetIO().MousePos.y - pos.y - region_sz * 0.5f;
+			float zoom = 4.0f;
+			if (region_x < 0.0f) { region_x = 0.0f; }
+			else if (region_x > size.x - region_sz) { region_x = size.x - region_sz; }
+			if (region_y < 0.0f) { region_y = 0.0f; }
+			else if (region_y > size.y - region_sz) { region_y = size.y - region_sz; }
+			ImGui::Text("Min: (%.2f, %.2f)", region_x, region_y);
+			ImGui::Text("Max: (%.2f, %.2f)", region_x + region_sz, region_y + region_sz);
+			ImVec2 uv0 = ImVec2((region_x) / size.x, (region_y) / size.y);
+			ImVec2 uv1 = ImVec2((region_x + region_sz) / size.x, (region_y + region_sz) / size.y);
+			ImGui::Image(imgui_shadowmap_id, ImVec2(region_sz * zoom, region_sz * zoom), uv0, uv1, tint_col, border_col);
+			ImGui::EndTooltip();
+		}
 	}
-	ImGui::End();
+}
 
-	ImGui::Begin("Lights");
+
+void draw_menus(GLuint depth_tex, vector<Mesh>& meshes) {
+	ImGui::Begin("Menu");
 	{
-		draw_light_dir_widget();
+		if (ImGui::TreeNode("ShadowMap")) {
+			tex_view_menu(depth_tex);
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNode("Player")) {
+			player_menu(player);
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNode("Lights")) {
+			sun_menu();
+			ImGui::TreePop();
+		}
+
+		if (ImGui::TreeNode("Meshes")) {
+			for (Mesh& mesh : meshes) {
+				mesh_menu(mesh);
+			}
+			ImGui::TreePop();
+		}
+		if (ImGui::TreeNode("Log")) {
+			show_log();
+			ImGui::TreePop();
+		}
 	}
 	ImGui::End();
 }
-
-
-
-void draw_depthmaps(GLuint framebuffer, Shader shader, vector<Mesh>& meshes) {
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-	glViewport(0, 0, 4096, 4096);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_DEPTH_BUFFER_BIT);
-
-	draw_meshes(shader, meshes);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void draw_main(Shader skybox_shader, ModelRange skybox_range, Shader shader, vector<Mesh>& meshes) {
-	glViewport(0, 0, screen_width, screen_height);
-	glClearColor(0.4f, 0.0f, 1.0f, 1.0f);
-	glClear(GL_DEPTH_BUFFER_BIT); // we don't clear color because we have a skybox
-
-	glDepthMask(GL_FALSE);
-	glUseProgram(skybox_shader.program);
-	glBindVertexArray(skybox_shader.vao);
-	skybox_shader.pre_render(skybox_shader);
-	draw_range(skybox_range);
-	glDepthMask(GL_TRUE);
-
-	draw_meshes(shader, meshes);
-}
-
 
 }  // namespace impl
 
@@ -601,9 +660,7 @@ int main(int argc, char* argv[]) {
 
 	caj::initialize_environment();
 	caj::initialize_buffer(&vbo);
-	// fill buffer
 	caj::impl::initialize_geometry(vbo, {"fort_sorrow"}, &cubemap, &meshes);
-	// set up attributes
 	caj::impl::initialize_shaders(&main_shader, &depthmap_shader, &skybox_shader);
 	caj::initialize_atlas(meshes);
 	caj::create_skybox("assets/skybox");
@@ -625,10 +682,10 @@ int main(int argc, char* argv[]) {
 		caj::player.update((SDL_GetTicks() - last_ticks)/1000.0);
 		last_ticks = SDL_GetTicks();
 
-		caj::impl::draw_menus(depthmap_tex);
+		caj::impl::draw_menus(depthmap_tex, meshes);
 
-		caj::impl::draw_depthmaps(framebuffer, depthmap_shader, meshes);
-		caj::impl::draw_main(skybox_shader, cubemap, main_shader, meshes);
+		caj::draw_depthmaps(framebuffer, depthmap_shader, meshes);
+		caj::draw_main(skybox_shader, cubemap, main_shader, meshes);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

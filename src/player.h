@@ -30,7 +30,7 @@ struct Player {
 
 	// settings
 	float noclip_speed = 4.0;
-	float pan_speed = 0.002;
+	float pan_speed = 0.075;
 	float width = 0.2;
 	float height = 0.4;
 

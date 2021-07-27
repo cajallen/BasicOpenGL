@@ -191,6 +191,7 @@ inline vector<pair<vector<Vertex>, Material>> parse_obj(string folder_name, stri
 				} else if (key == "f" || key == "usemtl") {
 					state = OBJ_PARSE::FACE;
 				} else {
+					if (key == "o") state = OBJ_PARSE::POS;
 					iss.ignore(numeric_limits<streamsize>::max(), '\n');
 					break;
 				}
@@ -207,6 +208,7 @@ inline vector<pair<vector<Vertex>, Material>> parse_obj(string folder_name, stri
 				} else if (key == "f" || key == "usemtl") {
 					state = OBJ_PARSE::FACE;
 				} else {
+					if (key == "o") state = OBJ_PARSE::POS;
 					iss.ignore(numeric_limits<streamsize>::max(), '\n');
 					break;
 				}
@@ -221,6 +223,7 @@ inline vector<pair<vector<Vertex>, Material>> parse_obj(string folder_name, stri
 				} else if (key == "f" || key == "usemtl") {
 					state = OBJ_PARSE::FACE;
 				} else {
+					if (key == "o") state = OBJ_PARSE::POS;
 					iss.ignore(numeric_limits<streamsize>::max(), '\n');
 					break;
 				}
@@ -233,6 +236,7 @@ inline vector<pair<vector<Vertex>, Material>> parse_obj(string folder_name, stri
 				} else if (key == "f" || key == "usemtl") {
 					state = OBJ_PARSE::FACE;
 				} else {
+					if (key == "o") state = OBJ_PARSE::POS;
 					iss.ignore(numeric_limits<streamsize>::max(), '\n');
 					break;
 				}
@@ -275,7 +279,9 @@ inline vector<pair<vector<Vertex>, Material>> parse_obj(string folder_name, stri
 					current_vertices.push_back(v2);
 					current_vertices.push_back(v3);
 				} else {
+					if (key == "o") state = OBJ_PARSE::POS;
 					iss.ignore(numeric_limits<streamsize>::max(), '\n');
+					break;
 				}
 			}
 		}
