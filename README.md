@@ -1,6 +1,26 @@
 ## Compiling
 I use Windows and VS. All dependencies are in `src/lib`.   
 
+## Description
+This was a project that started in a graduate-level computer graphics course. I archived my submission for the
+final project of that class at the bottom of this readme, in the Archive section.  
+Since then, I rewrite a lot of code in this codebase, as I learn how to use rendering APIs and openGL. I test
+what code structures are good for, I test programming styles, I benchmark things (casually for now), and I 
+try to implement stuff I don't understand. The goal of this repository isn't a product, it is exploration.  
+#### What I've achieved recently
+- I've shifted away from a lot of OOP structures. Some methods still do remain, but for the most part I am using methodless structs, as seen in `globals.h`.  
+- I'm slowly removing the hard coded parts of the initialization paths. For example, creating functions which allow an input of a list of model file names, and outputting them in a reasonable way.  
+- I wrote an obj importer to replace the library that I was using, partially for exploration, but primarily motivated by allowing automatic loading of materials, which is now supported.  
+- Makeshift tessellation-based heightmap geometry.  
+#### What I plan to work on
+- Ambient Occlusion  
+- Parallax Mapping  
+- Shader Support per-Object  
+- Uniform Buffer Objects  
+
+
+
+# Archive
 ## Key Features & Images
 #### Describe the various key features of your final working system. Show several images of your project working. Highlight the various features with different images. 
 [Video](https://www.youtube.com/watch?v=Cgk18eCGDM8)  
